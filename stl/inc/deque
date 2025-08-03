@@ -525,7 +525,7 @@ namespace deque_detail {
 #if _ITERATOR_DEBUG_LEVEL >= 1
         buckets_type<_Ty const, _Block> _Buckets{};
 
-        constexpr void verify() const noexcept {
+        constexpr bool verify() const noexcept {
             _STL_VERIFY(_Block_elem_curr >= _Buckets._Block_elem_begin,
                 "assert: _Block_elem_curr >= _Buckets._Block_elem_begin");
             _STL_VERIFY(
@@ -544,22 +544,7 @@ namespace deque_detail {
                 _STL_VERIFY(
                     _Elem_curr >= _Buckets._Elem_begin_begin, "assert: _Elem_curr >= _Buckets._Elem_begin_begin");
             }
-        }
-
-        constexpr void verify(deque_iterator const& other) const noexcept {
-            auto const& rhs = other._Buckets;
-            _STL_VERIFY(rhs._Block_elem_begin == _Buckets._Block_elem_begin,
-                "assert: rhs._Block_elem_begin == _Buckets._Block_elem_begin");
-            _STL_VERIFY(rhs._Block_elem_end == _Buckets._Block_elem_end,
-                "assert: rhs._Block_elem_end == _Buckets._Block_elem_end");
-            _STL_VERIFY(rhs._Elem_begin_begin == _Buckets._Elem_begin_begin,
-                "assert: rhs._Elem_begin_begin == _Buckets._Elem_begin_begin");
-            _STL_VERIFY(rhs._Elem_begin_end == _Buckets._Elem_begin_end,
-                "assert: rhs._Elem_begin_end == _Buckets._Elem_begin_end");
-            _STL_VERIFY(rhs._Elem_end_begin == _Buckets._Elem_end_begin,
-                "assert: rhs._Elem_end_begin == _Buckets._Elem_end_begin");
-            _STL_VERIFY(
-                rhs._Elem_end_end == _Buckets._Elem_end_end, "assert: rhs._Elem_end_end == _Buckets._Elem_end_end");
+            return true;
         }
 
         constexpr deque_iterator(_Block* block_curr, _Block* block_end, _RConstTy* const begin, _RConstTy* const pos,
@@ -567,10 +552,6 @@ namespace deque_detail {
             : _Block_elem_curr(block_curr), _Block_elem_end(block_end), _Elem_begin(deque_detail::to_address(begin)),
               _Elem_curr(deque_detail::to_address(pos)), _Buckets(buckets) {}
 #else
-        constexpr void verify() const noexcept {}
-
-        constexpr void verify(deque_iterator const& other) const noexcept {}
-
         constexpr deque_iterator(
             _Block* block_curr, _Block* block_end, _RConstTy* const begin, _RConstTy* const pos) noexcept
             : _Block_elem_curr(block_curr), _Block_elem_end(block_end), _Elem_begin(deque_detail::to_address(begin)),
@@ -588,7 +569,7 @@ namespace deque_detail {
         }
 
         constexpr _Ty& _At_impl(_STD ptrdiff_t const pos) const noexcept {
-            verify();
+            _STL_VERIFY(verify(), "assert: verify()");
             auto const [block_step, elem_step] = deque_detail::calc_pos<_Ty>(_Elem_curr - _Elem_begin, pos);
             auto const target_block            = _Block_elem_curr + block_step;
             _STL_VERIFY(target_block < _Block_elem_end, "assert: target_block < _Block_elem_end");
@@ -596,7 +577,7 @@ namespace deque_detail {
         }
 
         constexpr deque_iterator& _Plus_and_assign(_STD ptrdiff_t const pos) noexcept {
-            verify();
+            _STL_VERIFY(verify(), "assert: verify()");
             if (pos != _STD ptrdiff_t(0)) {
                 auto const [block_step, elem_step] = deque_detail::calc_pos<_Ty>(_Elem_curr - _Elem_begin, pos);
                 auto const target_block            = _Block_elem_curr + block_step;
@@ -612,6 +593,7 @@ namespace deque_detail {
                     _Elem_curr       = _Elem_begin + deque_detail::block_elements_v<_Ty>;
                 }
             }
+            _STL_VERIFY(verify(), "assert: verify()");
             return *this;
         }
 
@@ -635,7 +617,6 @@ namespace deque_detail {
         }
 
         constexpr _STD strong_ordering operator<=>(deque_iterator const& other) const noexcept {
-            verify(other);
             _STL_VERIFY(_Block_elem_end == other._Block_elem_end, "assert: _Block_elem_end == other._Block_elem_end");
             if (_Block_elem_curr < other._Block_elem_curr) {
                 return _STD strong_ordering::less;
@@ -665,7 +646,7 @@ namespace deque_detail {
         }
 
         constexpr deque_iterator& operator++() noexcept {
-            verify();
+            _STL_VERIFY(verify(), "assert: verify()");
             // 空deque的迭代器不能自增，不需要考虑
             _STL_VERIFY(_Elem_curr != _Elem_begin + deque_detail::block_elements_v<_Ty>,
                 "assert: _Elem_curr != _Elem_begin + deque_detail::block_elements_v<_Ty>");
@@ -677,6 +658,7 @@ namespace deque_detail {
                     _Elem_curr  = _Elem_begin;
                 }
             }
+            _STL_VERIFY(verify(), "assert: verify()");
             return *this;
         }
 
@@ -691,13 +673,14 @@ namespace deque_detail {
         }
 
         constexpr deque_iterator& operator--() noexcept {
-            verify();
+            _STL_VERIFY(verify(), "assert: verify()");
             if (_Elem_curr == _Elem_begin) {
                 --_Block_elem_curr;
                 _Elem_begin = _STD to_address(*_Block_elem_curr);
                 _Elem_curr  = _Elem_begin + deque_detail::block_elements_v<_Ty>;
             }
             --_Elem_curr;
+            _STL_VERIFY(verify(), "assert: verify()");
             return *this;
         }
 
@@ -720,7 +703,6 @@ namespace deque_detail {
         }
 
         friend constexpr _STD ptrdiff_t operator-(deque_iterator const& lhs, deque_iterator const& rhs) noexcept {
-            lhs.verify(rhs);
             _STL_VERIFY(
                 lhs._Block_elem_end == rhs._Block_elem_end, "assert: lhs._Block_elem_end == rhs._Block_elem_end");
             auto const block_size = lhs._Block_elem_curr - rhs._Block_elem_curr;
