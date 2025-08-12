@@ -6,14 +6,13 @@ A personally maintained vNext version of the Microsoft STL. Due to Microsoft's b
 
 - Fix the genuinely broken parts of the STL.
 - **No new features** will be added on top of the STL.
-- All changes are **header-only**, requiring no additional build or deployment steps.
 - Strict standard conformance is **non-goal**. Minor non-conformance issues may remain unfixed to simplify maintenance.
 
 If you find the project useful, be sure to **vote for vNext** in the [Developer Community](https://developercommunity.visualstudio.com/t/C-MSVC-Toolset-ABI-Break-:-Next-Stable/10769087) and don't forget to **share it** with others.
 
 ## Advantages
 
-**No dependencies**, **no need to modify source code**. The high-quality implementations provided by this project are more standards-compliant **than** Microsoft STL and sometimes **even** outperform libc++ and libstdc++ (which are also ABI-constrained).
+**No need to modify source code**. The high-quality implementations provided by this project are more standards-compliant **than** Microsoft STL and sometimes **even** outperform libc++ and libstdc++ (which are also ABI-constrained).
 
 For more information, see [#3](https://github.com/YexuanXiao/STL-vNext/issues/3).
 
