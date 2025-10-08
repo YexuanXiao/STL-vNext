@@ -2,25 +2,25 @@ import re
 import sys
 
 def transform_identifier(s):
-    # 规则0: 不处理白名单标识符
+    # 规则1: 不处理白名单标识符
     if s in ['GCC']:
         return s
 
-    # 规则1: 如果以下划线结尾，删除结尾下划线并将首字母大写
+    # 规则2: 如果以下划线结尾，删除结尾下划线并将首字母大写
     if s.endswith('_'):
         s = s[:-1]
         if s:  # 确保非空字符串
             s = s[0].upper() + s[1:]
 
-    # 规则2: 如果标识符仅有一个字母且为大写，添加'y'
+    # 规则3: 如果标识符仅有一个字母且为大写，添加'y'
     if len(s) == 1 and s.isupper():
         s += 'y'
 
-    # 规则3：如果标识符以T结尾且不包含下划线，添加'y'
+    # 规则4：如果标识符以T结尾且不包含下划线，添加'y'
     if s.endswith('T') and (not ('_' in s)):
         s += 'y'
 
-    # 规则4: 如果以大写字母开头，添加下划线前缀
+    # 规则5: 如果以大写字母开头，添加下划线前缀
     if s and s[0].isupper():
         s = '_' + s
 
@@ -46,32 +46,44 @@ if __name__ == '__main__':
 
     with open(input_file, 'r') as f:
         content = f.read()
+    
+    #步骤0: 处理警告
+    content = content.replace('#pragma clang diagnostic push', '#pragma clang diagnostic push\n#pragma clang diagnostic ignored "-Wuser-defined-literals"')
 
-    #步骤1: 处理DEBUG宏
-    if (not container):
-        content = content.replace('!defined(NDEBUG)', 'defined(_DEBUG)')
-        content = content.replace('defined(NDEBUG)', '!defined(_DEBUG)')
-    else:
-        content = content.replace('!defined(NDEBUG)', '_ITERATOR_DEBUG_LEVEL >= 1')
-        content = content.replace('defined(NDEBUG)', '_ITERATOR_DEBUG_LEVEL < 1')
+    #步骤1: 处理out_of_range和length_error
+    content = content.replace('throw ::std::out_of_range', '_Xout_of_range')
+    content = content.replace('throw ::std::length_error', '_Xlength_error')
 
-    #步骤2: 处理size_t字面量
+    #步骤2: 处理min和max
+    content = content.replace('(::std::min)', '(_STD min)')
+    content = content.replace('(::std::max)', '(_STD max)')
+    content = content.replace('::std::min', '(_STD min)')
+    content = content.replace('::std::max', '(_STD max)')
+
+    #步骤3: 处理DEBUG宏
+    content = content.replace('!defined(NDEBUG)', '(_MSVC_STL_HARDENING_OPTIONAL || _ITERATOR_DEBUG_LEVEL != 0)')
+    content = content.replace('defined(NDEBUG)', '!(_MSVC_STL_HARDENING_OPTIONAL || _ITERATOR_DEBUG_LEVEL != 0)')
+
+    #步骤4: 处理size_t字面量
     content = re.sub(r'(\d+)uz', r'::std::size_t(\1)', content)
     content = re.sub(r'(\d+)z', r'::std::ptrdiff_t(\1)', content)
 
-    # 步骤3: 把所有::std::替换为_STD
+    # 步骤5: 把所有::std::替换为_STD
     content = content.replace('::std::', ' _STD ')
+    content = content.replace('std::', ' _STD ')
+    content = content.replace('bizwen::', ' _STD ')
+    content = content.replace('::bizwen::', ' _STD ')
 
-    # 步骤4: 处理namespace
+    # 步骤6: 处理namespace
     content = content.replace('namespace std\n{', '_STD_BEGIN')
     content = content.replace('namespace bizwen\n{', '_STD_BEGIN')
     content = content.replace('namespace std {', '_STD_BEGIN')
     content = content.replace('namespace bizwen {', '_STD_BEGIN')
     content = content.replace('} // namespace bizwen', '_STD_END')
     content = content.replace('} // namespace std', '_STD_END')
-    content = content.replace('bizwen', '_STD ')
+    content = content.replace('bizwen', '_STD')
 
-    # 步骤5: 处理双引号字符串 - 用占位符替换并保存
+    # 步骤7 处理双引号字符串 - 用占位符替换并保存
     string_placeholders = []
     pattern_string = r'\"(?:[^\"\\]|\\.)*\"'  # 匹配双引号包裹的内容（包括转义字符）
 
@@ -82,7 +94,7 @@ if __name__ == '__main__':
     # 用占位符替换所有双引号字符串
     content_no_strings = re.sub(pattern_string, replace_string, content)
 
-    # 步骤6: 处理单行注释和标识符
+    # 步骤8: 处理单行注释和标识符
     lines = content_no_strings.split('\n')
     processed_lines = []
 
@@ -116,13 +128,13 @@ if __name__ == '__main__':
     # 重新组合内容
     content = '\n'.join(processed_lines)
 
-    # 步骤7: 恢复双引号字符串
+    # 步骤9: 恢复双引号字符串
     for i, s in enumerate(string_placeholders):
         placeholder = f'__STRING_PLACEHOLDER_{i}__'
         content = content.replace(placeholder, s)
 
-    # 步骤8: 将assert换为_STL_VERIFY
-    content = re.sub(r'(?<!_)\bassert\((.*?)\);\n', r'_STL_VERIFY(\1, "assert: \1");\n', content)
+    # 步骤10: 将assert换为_STL_ASSERT
+    content = re.sub(r'(?<!_)\bassert\((.*?)\);\n', r'#if ((_MSVC_STL_HARDENING_OPTIONAL || _ITERATOR_DEBUG_LEVEL != 0))\n_STL_ASSERT(\1, "assert: \1");\n#endif\n''', content)
 
     with open(output_file, 'w') as f:
         f.write(content)
