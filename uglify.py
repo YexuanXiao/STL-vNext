@@ -1,17 +1,20 @@
 import re
 import sys
 
+def splitcomment(s):
+    return (s[:i], s[i:]) if (i := s.find('//')) != -1 else (s, '')
+
 def transform_identifier(s, identifiers, keywords):
     # 规则1: 不处理白名单标识符
 
     compilerspec = ['GCC', 'gnu', 'clang', 'msvc']
-    
+
     stdns =  ['std', 'pmr', 'chrono', 'ranges', 'experimental']
-    
+
     attribute =  ['noreturn', 'deprecated', 'fallthrough', 'maybe_unused', 'nodiscard', 'likely', 'unlikely', 'no_unique_address', 'assume', 'indeterminate']
-    
+
     missindex = ['range_value_t', 'from_range_t', 'rebind_traits', 'is_nothrow_copy_constructible_v', 'pop_back', 'pop_front']
-    
+
     if s in compilerspec + stdns + attribute + keywords + identifiers + missindex:
         return s
 
@@ -57,7 +60,7 @@ if __name__ == '__main__':
 
     with open(input_file, 'r') as f:
         content = f.read()
-    
+
     #步骤0: 处理警告
     content = content.replace('#pragma clang diagnostic push', '#pragma clang diagnostic push\n#pragma clang diagnostic ignored "-Wuser-defined-literals"')
 
@@ -130,21 +133,19 @@ if __name__ == '__main__':
             processed_lines.append(line)
             continue
 
-        # 检查是否为单行注释（忽略前导空格）
-        if re.match(r'^\s*//', line):
-            # 单行注释 - 直接保留原内容
-            processed_lines.append(line)
-            continue
+        # 分割单行注释为代码部分和注释部分
+        front, back = splitcomment(line)
 
         # 匹配并转换标识符
         pattern_identifier = r'\b[a-zA-Z][a-zA-Z0-9_]*\b'
-        identifiers = set(re.findall(pattern_identifier, line))
+        identifiers = set(re.findall(pattern_identifier, front))
 
         # 执行替换
         for identifier in identifiers:
-            line = re.sub(r'\b' + re.escape(identifier) + r'\b', transform_identifier(identifier, std_identifiers, keywords), line)
+            front = re.sub(r'\b' + re.escape(identifier) + r'\b', transform_identifier(identifier, std_identifiers, keywords), front)
 
-        processed_lines.append(line)
+        # 和注释拼接后输出
+        processed_lines.append(front + back)
 
     # 重新组合内容
     content = '\n'.join(processed_lines)
