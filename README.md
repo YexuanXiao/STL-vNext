@@ -37,6 +37,7 @@ The following is a list of problems that this project will fix:
 
 - ✅ [`<deque>` : A `deque<T>` where `T` is move-only, when nested in vector, does not compile](https://github.com/microsoft/STL/issues/1036)
 - ✅ [`<deque>`: Needs a major performance overhaul](https://github.com/microsoft/STL/issues/147)
+- ✅ [special_math.cpp: Statically linked library contains and depends on Boost symbols](https://github.com/microsoft/STL/issues/362)
 - ❎ [`<array>`: `std::array<T,0>` calls constructors and destructors of `T`](https://github.com/microsoft/STL/issues/5583)
 - ❎ [Reconsider `vector<bool>` underlying type](https://github.com/microsoft/STL/issues/5348)
 - ❎ [`<functional>`: better hash function](https://github.com/microsoft/STL/issues/2360)
