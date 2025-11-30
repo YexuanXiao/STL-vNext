@@ -1,0 +1,49 @@
+
+# vNext
+
+# string's SSO can store more characters
+std/strings/basic.string/string.cons/copy_alloc.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.cons/copy_alloc.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.cons/copy_alloc.pass.cpp:2 SKIPPED
+
+std/strings/basic.string/string.cons/dtor.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.cons/dtor.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.cons/dtor.pass.cpp:2 SKIPPED
+
+std/strings/basic.string/string.nonmembers/string_op+/char_string.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/char_string.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/char_string.pass.cpp:2 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/pointer_string.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/pointer_string.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/pointer_string.pass.cpp:2 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/string_char.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/string_char.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/string_char.pass.cpp:2 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/string_pointer.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/string_pointer.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/string_pointer.pass.cpp:2 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/string_string.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/string_string.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.nonmembers/string_op+/string_string.pass.cpp:2 SKIPPED
+
+# max_size is not constexpr
+std/strings/basic.string/string.cons/move_alloc.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.cons/move_alloc.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.cons/move_alloc.pass.cpp:2 SKIPPED
+
+std/strings/basic.string/string.cons/substr_rvalue.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.cons/substr_rvalue.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.cons/substr_rvalue.pass.cpp:2 SKIPPED
+
+std/strings/basic.string/string.modifiers/string_swap/swap.pass.cpp:0 SKIPPED
+std/strings/basic.string/string.modifiers/string_swap/swap.pass.cpp:1 SKIPPED
+std/strings/basic.string/string.modifiers/string_swap/swap.pass.cpp:2 SKIPPED
+
+# nasty char type that cannot comparison
+std/strings/basic.string/string.modifiers/string_append/initializer_list.pass.cpp:2 SKIPPED
+std/strings/basic.string/string.modifiers/string_assign/string.pass.cpp:2 SKIPPED
+
+# do not use Allocator::size_type
+std/strings/basic.string/types.pass.cpp:0 SKIPPED
+std/strings/basic.string/types.pass.cpp:1 SKIPPED
+std/strings/basic.string/types.pass.cpp:2 SKIPPED

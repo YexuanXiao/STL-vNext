@@ -1,0 +1,2618 @@
+// xstring internal header
+
+// Copyright 2023-2025 YexuanXiao
+// https://github.com/YexuanXiao/basic_string
+
+// Copyright (c) Microsoft Corporation.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#ifndef _XSTRING_
+#define _XSTRING_
+#include <yvals_core.h>
+#if _STL_COMPILER_PREPROCESSOR
+
+#include <__msvc_string_view.hpp>
+#include <iosfwd>
+#include <xmemory>
+#include <xpolymorphic_allocator.h>
+
+#pragma push_macro("new")
+#undef new
+
+// if consteval
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(push)
+#pragma warning(disable : 5282)
+#elif defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wuser-defined-literals"
+#pragma clang diagnostic ignored "-Wc++23-extensions"
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wc++23-extensions"
+#endif
+
+_STD_BEGIN
+
+template <typename _CharTy, typename _Traits = _STD char_traits<_CharTy>, typename _Alloc = _STD allocator<_CharTy>>
+class basic_string;
+
+namespace string_detail {
+
+    template <typename _Ty>
+    class string_iterator {
+        using _CharTy = _STD remove_const_t<_Ty>;
+
+        template <typename, typename, typename>
+        friend class _STD basic_string;
+        friend string_iterator<_CharTy const>;
+        friend string_iterator<_CharTy>;
+
+    public:
+        using difference_type   = _STD ptrdiff_t;
+        using value_type        = _CharTy;
+        using pointer           = _Ty*;
+        using reference         = _Ty&;
+        using iterator_category = _STD random_access_iterator_tag;
+        using iterator_concept  = _STD contiguous_iterator_tag;
+
+    private:
+        pointer _Current{};
+
+#if defined(_DEBUG)
+        _CharTy const* _Begin{};
+        _CharTy const* _End{};
+#endif
+
+#if defined(_DEBUG)
+        // Call after iteration.
+        constexpr bool verify() const noexcept {
+            _STL_ASSERT(_Current >= _Begin && _Current <= _End, "assert: _Current >= _Begin && _Current <= _End");
+            return true;
+        }
+#endif
+
+    public:
+        string_iterator() noexcept                                    = default;
+        string_iterator(string_iterator const&) noexcept              = default;
+        string_iterator& operator=(string_iterator const&) & noexcept = default;
+
+    private:
+#if defined(_DEBUG)
+        constexpr string_iterator(_Ty* current, _CharTy const* begin, _CharTy const* end) noexcept
+            : _Current(current), _Begin(begin), _End(end) {}
+#else
+        constexpr string_iterator(_Ty* current) noexcept : _Current(current) {}
+#endif
+
+    public:
+        constexpr string_iterator operator+(difference_type n) const& noexcept {
+            auto temp = *this;
+            temp._Current += n;
+            _STL_ASSERT(temp.verify(), "assert: temp.verify()");
+
+            return temp;
+        }
+
+        constexpr string_iterator operator-(difference_type n) const& noexcept {
+            auto temp = *this;
+            temp._Current -= n;
+            _STL_ASSERT(temp.verify(), "assert: temp.verify()");
+
+            return temp;
+        }
+
+        constexpr friend string_iterator operator+(difference_type n, string_iterator const& rhs) noexcept {
+            auto temp = rhs;
+            temp._Current += n;
+            _STL_ASSERT(temp.verify(), "assert: temp.verify()");
+
+            return temp;
+        }
+
+        constexpr friend string_iterator operator-(difference_type n, string_iterator const& rhs) noexcept {
+            auto temp = rhs;
+            temp._Current -= n;
+            _STL_ASSERT(temp.verify(), "assert: temp.verify()");
+
+            return temp;
+        }
+
+        constexpr friend difference_type operator-(string_iterator const& lhs, string_iterator const& rhs) noexcept {
+            _STL_ASSERT(lhs._Begin == rhs._Begin, "assert: _Left._Begin == _Right._Begin");
+            return lhs._Current - rhs._Current;
+        }
+
+        constexpr string_iterator& operator+=(difference_type n) & noexcept {
+            _Current += n;
+            _STL_ASSERT(verify(), "assert: verify()");
+
+            return *this;
+        }
+
+        constexpr string_iterator& operator-=(difference_type n) & noexcept {
+            _Current -= n;
+            _STL_ASSERT(verify(), "assert: verify()");
+
+            return *this;
+        }
+
+        constexpr string_iterator& operator++() & noexcept {
+            ++_Current;
+            _STL_ASSERT(verify(), "assert: verify()");
+
+            return *this;
+        }
+
+        constexpr string_iterator& operator--() & noexcept {
+            --_Current;
+            _STL_ASSERT(verify(), "assert: verify()");
+
+            return *this;
+        }
+
+        constexpr string_iterator operator++(int) & noexcept {
+            auto temp = *this;
+            ++_Current;
+            _STL_ASSERT(verify(), "assert: verify()");
+
+            return temp;
+        }
+
+        constexpr string_iterator operator--(int) & noexcept {
+            auto temp = *this;
+            --_Current;
+            _STL_ASSERT(verify(), "assert: verify()");
+
+            return temp;
+        }
+
+        constexpr _Ty& operator[](difference_type n) const noexcept {
+#if defined(_DEBUG)
+            auto end = (*this) + n;
+            _STL_ASSERT(end.verify(), "assert: end.verify()");
+#endif
+            return *(_Current + n);
+        }
+
+        constexpr auto& operator*() const noexcept {
+            return *_Current;
+        }
+
+        constexpr auto* operator->() const noexcept {
+            return _Current;
+        }
+
+#if defined(_DEBUG)
+        friend constexpr _STD strong_ordering operator<=>(
+            string_iterator const& lhs, string_iterator const& rhs) noexcept {
+            _STL_ASSERT(lhs._Begin == rhs._Begin, "assert: _Left._Begin == _Right._Begin");
+            return lhs._Current <=> rhs._Current;
+        }
+
+        friend constexpr bool operator==(string_iterator const& lhs, string_iterator const& rhs) noexcept {
+            _STL_ASSERT(lhs._Begin == rhs._Begin, "assert: _Left._Begin == _Right._Begin");
+            return lhs._Current == rhs._Current;
+        }
+#else
+        friend constexpr _STD strong_ordering operator<=>(
+            string_iterator const&, string_iterator const&) noexcept = default;
+#endif
+
+        constexpr operator string_iterator<_CharTy const>() const
+            requires (!_STD is_const_v<_Ty>)
+        {
+#if defined(_DEBUG)
+            return {_Current, _Begin, _End};
+#else
+            return {_Current};
+#endif
+        }
+
+#if _ITERATOR_DEBUG_LEVEL >= 1
+        friend constexpr void _Verify_range(
+            [[maybe_unused]] const string_iterator& _Left, [[maybe_unused]] const string_iterator& _Right) noexcept {
+            _STL_ASSERT(_Left._Begin == _Right._Begin, "assert: _Left._Begin == _Right._Begin");
+            return;
+        }
+#endif // _ITERATOR_DEBUG_LEVEL >= 1
+
+        using _Prevent_inheriting_unwrap = string_iterator;
+
+        constexpr auto* _Unwrapped() const noexcept {
+            return _Current;
+        }
+
+        constexpr void _Seek_to(value_type const* ptr) noexcept {
+            _Current = const_cast<value_type*>(ptr);
+        }
+    };
+
+
+    template <typename A>
+    concept mini_alloc = requires(A& a) {
+        typename A::value_type;
+        a.allocate(::std::size_t(0));
+    };
+} // namespace string_detail
+
+template <typename _CharTy, typename _Traits, typename _Alloc>
+class basic_string {
+    using _Atraits_t = _STD allocator_traits<_Alloc>;
+
+    template <typename _StringViewLike>
+    inline static constexpr bool _Is_svlike_v =
+        _STD is_convertible_v<_StringViewLike const&, _STD basic_string_view<_CharTy, _Traits>>
+        && (!_STD is_convertible_v<_StringViewLike const&, _CharTy const*>);
+
+public:
+    using traits_type     = _Traits;
+    using value_type      = _CharTy;
+    using allocator_type  = _Alloc;
+    using size_type       = _STD size_t;
+    using difference_type = _STD ptrdiff_t;
+    using reference       = value_type&;
+    using const_reference = value_type const&;
+    using pointer         = typename _Atraits_t::pointer;
+    using const_pointer   = typename _Atraits_t::const_pointer;
+
+    static inline constexpr size_type npos = size_type(-1);
+
+private:
+    /**
+     * @brief type of long string
+     */
+    struct _Ls_type {
+        pointer _Begin{};
+        _CharTy* _End{};
+        _CharTy* _Last{};
+
+        constexpr auto begin() const noexcept {
+            return _STD to_address(_Begin);
+        }
+
+        constexpr auto end() const noexcept {
+            return _End;
+        }
+    };
+
+    // -2 is due to the null terminator and size_flag
+    /**
+     * @brief _Short_str_max is the max length of short string
+     */
+    static inline constexpr _STD size_t _Short_str_max{
+        (_STD max) (sizeof(_CharTy*) * _STD size_t(4) / sizeof(_CharTy), _STD size_t(4)) - _STD size_t(2)};
+
+    struct _Ss_type {
+        _CharTy _Buffer[_Short_str_max + _STD size_t(1) /* null terminator */]{};
+
+        constexpr auto data() const noexcept {
+            return _STD begin(_Buffer);
+        }
+
+        constexpr auto data() noexcept {
+            return _STD begin(_Buffer);
+        }
+    };
+
+    /**
+     * @brief union storage long string and short string
+     */
+#pragma pack(push, 1)
+    union _Storage_type {
+        _Ss_type _Ss;
+        _Ls_type _Ls;
+    };
+#pragma pack(pop)
+    // https://github.com/microsoft/STL/issues/1364
+#if __has_cpp_attribute(msvc::no_unique_address)
+    [[msvc::no_unique_address]] alignas(_CharTy*) _Alloc _Allocator{};
+#else
+    // Using the alignment of the allocator to ensure the entire structure is properly aligned
+    [[no_unique_address]] alignas(_CharTy*) _Alloc _Allocator{};
+#endif
+
+    /**
+     * @brief storage of string
+     */
+    _Storage_type _Stor{};
+
+    /**
+     * @brief flag > 0: short string, length of string is size_flag
+     * @brief flag = 0: empty string
+     * @brief flag = _MAX: long string, length of string is end - begin
+     * @brief _If the string migrates from short to long, then any operation other than
+     * @brief move and shrink_to_fit will not make it revert back to short
+     */
+    alignas(_CharTy) unsigned char _Size_flag{};
+
+    // sizeof(basic_string<T,  _STD allocator>) is always equal to sizeof(void*) * 4
+
+    [[noreturn]] static constexpr void _Throw_out_of_range() {
+        _Xout_of_range("pos/index is out of range, please check it.");
+    }
+
+    [[noreturn]] static constexpr void _Throw_length_error() {
+        _Xlength_error("string too long.");
+    }
+
+    /**
+     * @brief check if the two ranges overlap, and if overlap, new memory needs to
+     * allocate
+     **/
+    static constexpr bool _Overlap([[maybe_unused]] _CharTy const* first_inner,
+        [[maybe_unused]] _CharTy const* last_inner, [[maybe_unused]] _CharTy const* first_outer,
+        [[maybe_unused]] _CharTy const* last_outer) noexcept {
+        // [utilities.comparisons.general] strict total order over pointers.
+        if (_STD less{}(first_inner, first_outer) || !_STD less{}(first_inner, last_outer)) {
+            _STL_ASSERT(_STD greater{}(first_outer, last_inner) || !_STD less{}(last_inner, last_outer),
+                "assert: _STD greater{}(first_outer, last_inner) || !_STD less{}(last_inner, last_outer)");
+            // input range overlaps with *this but is larger
+            return false;
+        }
+        return true;
+    }
+
+    constexpr auto& _Long_str() noexcept {
+        return _Stor._Ls;
+    }
+
+    constexpr auto& _Short_str() noexcept {
+        return _Stor._Ss;
+    }
+
+    constexpr auto& _Long_str() const noexcept {
+        return _Stor._Ls;
+    }
+
+    constexpr auto& _Short_str() const noexcept {
+        return _Stor._Ss;
+    }
+
+    /**
+     * @brief convert to long string and set the flag
+     */
+    constexpr void _Long_str(_Ls_type const& ls) noexcept {
+        _Stor      = _Storage_type{._Ls = ls};
+        _Size_flag = static_cast<unsigned char>(-1);
+        *ls.end()  = _CharTy{};
+    }
+
+    /**
+     * @brief convert to short string and resize
+     */
+    constexpr void _Short_str(size_type size) noexcept {
+        _Stor                         = _Storage_type{};
+        _Size_flag                    = static_cast<unsigned char>(size);
+        *(_Short_str().data() + size) = _CharTy{};
+    }
+
+    constexpr bool _Is_long() const noexcept {
+        return _Size_flag == static_cast<unsigned char>(-1);
+    }
+
+    constexpr bool _Is_short() const noexcept {
+        return !_Is_long();
+    }
+
+    constexpr void _Resize_shrink(bool is_long, size_type n) noexcept {
+        _STL_ASSERT(_Is_long() == is_long, "assert: _Is_long() == is_long");
+        if (is_long) {
+            auto& ls = _Long_str();
+            ls._End  = ls.begin() + n;
+            _Atraits_t::construct(_Allocator, ls._End);
+        } else {
+            _Size_flag                          = static_cast<unsigned char>(n);
+            *(_Short_str().data() + _Size_flag) = _CharTy{};
+        }
+    }
+
+    constexpr size_type _Size() const noexcept {
+        return _Is_short() ? _Size_flag : _Long_str().end() - _Long_str().begin();
+    }
+
+    constexpr _STD basic_string_view<value_type, traits_type> _View() const noexcept {
+        return {_Begin(), _End()};
+    }
+
+    // ***************************** begin volume *****************************
+public:
+    constexpr size_type size() const noexcept {
+        return _Size();
+    }
+
+    constexpr size_type length() const noexcept {
+        return _Size();
+    }
+
+    constexpr bool empty() const noexcept {
+        return !_Size();
+    }
+
+    /**
+     * Useless function, its existence is only to pass pedantic tests, using it is just a waste of time
+     */
+    constexpr size_type max_size() const noexcept {
+        return (_STD min) (_STD size_t(-1) / sizeof(_CharTy) / _STD size_t(2),
+                   static_cast<size_type>(_Atraits_t::max_size(_Allocator)))
+             - _STD size_t(1) /* null terminator */;
+    }
+
+    constexpr size_type capacity() const noexcept {
+        return _Is_short() ? _Short_str_max : _Long_str()._Last - _Long_str().begin();
+    }
+
+    /**
+     * @brief shrink only occur on short string is enough to storage
+     */
+    constexpr void shrink_to_fit() noexcept {
+        if (_Is_long() && _Size() <= _Short_str_max) {
+            // copy to local
+            auto const ls = _Long_str();
+            _Short_str(_Size());
+            _STD copy(ls.begin(), ls.end(), _Short_str().data());
+            _Dealloc(ls);
+        }
+    }
+
+    friend struct _Construct_guard;
+
+    struct _Construct_guard {
+        basic_string* self;
+
+        constexpr void release() noexcept {
+            self = nullptr;
+        }
+
+        constexpr ~_Construct_guard() {
+            if (self) {
+                self->_Dealloc(self->_Is_long());
+            }
+        }
+    };
+
+    // ************************* begin element access *************************
+
+private:
+    /**
+     * @return a pointer to the first element
+     */
+    constexpr _CharTy const* _Begin() const noexcept {
+        return _Is_short() ? _Short_str().data() : _Long_str().begin();
+    }
+
+    /**
+     * @return a pointer to the first element
+     */
+    constexpr _CharTy* _Begin() noexcept {
+        return _Is_short() ? _Short_str().data() : _Long_str().begin();
+    }
+
+    /**
+     * @return a pointer to the next position of the last element
+     */
+    constexpr _CharTy const* _End() const noexcept {
+        return _Is_short() ? _Short_str().data() + _Size_flag : _Long_str().end();
+    }
+
+    /**
+     * @return a pointer to the next position of the last element
+     */
+    constexpr _CharTy* _End() noexcept {
+        return _Is_short() ? _Short_str().data() + _Size_flag : _Long_str().end();
+    }
+
+public:
+    constexpr _CharTy const* data() const noexcept {
+        return _Begin();
+    }
+
+    constexpr _CharTy* data() noexcept {
+        return _Begin();
+    }
+
+    constexpr _CharTy const* c_str() const noexcept {
+        return _Begin();
+    }
+
+    constexpr const_reference at(size_type pos) const {
+        if (pos < _Size()) {
+            return *(_Begin() + pos);
+        }
+
+        _Throw_out_of_range();
+    }
+
+    constexpr reference at(size_type pos) {
+        if (pos < _Size()) {
+            return *(_Begin() + pos);
+        }
+
+        _Throw_out_of_range();
+    }
+
+    constexpr const_reference operator[](size_type pos) const noexcept {
+        _STL_ASSERT(pos <= _Size(), "assert: pos <= _Size()");
+
+        return *(_Begin() + pos);
+    }
+
+    constexpr reference operator[](size_type pos) noexcept {
+        _STL_ASSERT(pos <= _Size(), "assert: pos <= _Size()");
+
+        return *(_Begin() + pos);
+    }
+
+    constexpr const_reference front() const noexcept {
+        _STL_ASSERT(!empty(), "assert: !empty()");
+
+        return *_Begin();
+    }
+
+    constexpr reference front() {
+        _STL_ASSERT(!empty(), "assert: !empty()");
+
+        return *_Begin();
+    }
+
+    constexpr const_reference back() const noexcept {
+        _STL_ASSERT(!empty(), "assert: !empty()");
+
+        return *(_End() - _STD size_t(1));
+    }
+
+    constexpr reference back() {
+        _STL_ASSERT(!empty(), "assert: !empty()");
+
+        return *(_End() - _STD size_t(1));
+    }
+
+    constexpr operator _STD basic_string_view<value_type, traits_type>() const noexcept {
+        return _View();
+    }
+
+    // ************************ begin iterator function ************************
+
+public:
+    using iterator               = string_detail::string_iterator<value_type>;
+    using const_iterator         = string_detail::string_iterator<value_type const>;
+    using reverse_iterator       = _STD reverse_iterator<iterator>;
+    using const_reverse_iterator = _STD reverse_iterator<const_iterator>;
+
+    friend iterator;
+    friend const_iterator;
+
+    constexpr iterator begin() noexcept {
+#if defined(_DEBUG)
+        return {_Begin(), _Begin(), _End()};
+#else
+        return {_Begin()};
+#endif
+    }
+
+    constexpr iterator end() noexcept {
+#if defined(_DEBUG)
+        return {_End(), _Begin(), _End()};
+#else
+        return {_End()};
+#endif
+    }
+
+    constexpr const_iterator begin() const noexcept {
+#if defined(_DEBUG)
+        return {_Begin(), _Begin(), _End()};
+#else
+        return {_Begin()};
+#endif
+    }
+
+    constexpr const_iterator end() const noexcept {
+#if defined(_DEBUG)
+        return {_End(), _Begin(), _End()};
+#else
+        return {_End()};
+#endif
+    }
+
+    constexpr const_iterator cbegin() const noexcept {
+        return begin();
+    }
+
+    constexpr const_iterator cend() const noexcept {
+        return end();
+    }
+
+    constexpr auto rbegin() noexcept {
+        return reverse_iterator{end()};
+    }
+    constexpr auto rbegin() const noexcept {
+        return const_reverse_iterator{end()};
+    }
+    constexpr auto rend() noexcept {
+        return reverse_iterator{begin()};
+    }
+    constexpr auto rend() const noexcept {
+        return const_reverse_iterator{begin()};
+    }
+    constexpr auto crbegin() const noexcept {
+        return const_reverse_iterator{cend()};
+    }
+    constexpr auto crend() const noexcept {
+        return const_reverse_iterator{cbegin()};
+    }
+
+    // ************************ begin memory management ************************
+
+private:
+    /**
+     * @brief allocates memory and automatically adds 1 to store null terminator
+     * @param n, expected number of characters
+     */
+    constexpr _Ls_type _Allocate(size_type cap, size_type size) {
+#if defined(__cpp_lib_allocate_at_least) && (__cpp_lib_allocate_at_least >= 202302L)
+        auto const [ptr, count] = _Atraits_t::allocate_at_least(
+            _Allocator, static_cast<_Atraits_t::size_type>(cap + _STD size_t(1) /* null terminator */));
+
+        if consteval {
+            for (auto i = _STD size_t(0); i != count; ++i) {
+                _STD construct_at(_STD addressof(ptr[i]));
+            }
+        }
+
+        return {ptr, _STD to_address(ptr) + size, _STD to_address(ptr) + count - _STD size_t(1) /* null terminator */};
+#else
+        auto const ptr = _Atraits_t::allocate(
+            _Allocator, static_cast<_Atraits_t::size_type>(cap + _STD size_t(1) /* null terminator */));
+
+        if consteval {
+            for (auto i = _STD size_t(0); i != cap + _STD size_t(1); ++i) {
+                _STD construct_at(_STD addressof(ptr[i]));
+            }
+        }
+
+        return {ptr, _STD to_address(ptr) + size, _STD to_address(ptr) + cap};
+#endif
+    }
+
+    /**
+     * @brief dealloc the memory of long string
+     * @param ls, allocated long string
+     */
+    constexpr void _Dealloc(_Ls_type const& ls) noexcept {
+        _Atraits_t::deallocate(_Allocator, ls._Begin,
+            static_cast<_Atraits_t::size_type>(
+                ls._Last - _STD to_address(ls._Begin) + _STD size_t(1) /* null terminator */));
+    }
+
+    constexpr void _Dealloc(bool is_long) noexcept {
+        // avoid access the inactive member of union
+        if (is_long) {
+            _Dealloc(_Long_str());
+        }
+    }
+
+public:
+    /**
+     * @brief caculate the length of c style string
+     * @param begin begin of characters
+     * @return length
+     */
+    constexpr static size_type _C_string_length_common(_CharTy const* begin) noexcept {
+        auto end = begin;
+
+        for (; *end != _CharTy{}; ++end)
+            ;
+
+        return end - begin;
+    }
+    constexpr static size_type _C_string_length(_CharTy const* begin) noexcept {
+        if !consteval {
+            if constexpr (_STD is_same_v<char, _CharTy> || _STD is_same_v<char8_t, _CharTy>) {
+                return _STD strlen(reinterpret_cast<char const*>(begin));
+            } else if constexpr (_STD is_same_v<wchar_t, _CharTy>) {
+                return _STD wcslen(begin);
+            } else {
+                return _C_string_length_common(begin);
+            }
+        } else {
+            return _C_string_length_common(begin);
+        }
+    }
+
+private:
+    /**
+     * @brief assign characters to *this
+     * @brief this function can be called with any legal state
+     * @brief strong exception safety guarantee
+     */
+    constexpr void _Assign(_CharTy const* first, _CharTy const* last, bool is_long, size_type new_size) {
+        _STL_ASSERT(is_long == _Is_long(), "assert: is_long == _Is_long()");
+        auto const ls = _Allocate(new_size, new_size);
+        _STD copy(first, last, ls.begin());
+        _Dealloc(is_long);
+        _Long_str(ls);
+    }
+
+    constexpr void _Assign(_CharTy const* first, _CharTy const* last) {
+        auto const is_long  = _Is_long();
+        auto const new_size = static_cast<size_type>(last - first);
+
+        if !consteval {
+            if (capacity() >= new_size) {
+                auto const begin = _Begin();
+                _STD less_equal less_eq;
+                if (!(less_eq(first, begin) && less_eq(begin, first))) {
+                    _STD copy(first, last, begin);
+                }
+                _Resize_shrink(is_long, new_size);
+            } else {
+                _Assign(first, last, is_long, new_size);
+            }
+        } else {
+            _Assign(first, last, is_long, new_size);
+        }
+    }
+
+    /**
+     * @brief insert characters to *this
+     * @brief this function can be called with any legal state
+     * @brief strong exception safety guarantee
+     */
+    constexpr void _Insert(size_type index, _CharTy const* first, _CharTy const* last, _CharTy* begin, _CharTy* end,
+        bool is_long, size_type length, size_type new_size) {
+        auto const ls = _Allocate(new_size, new_size);
+        _STD copy(begin, begin + index, ls.begin());
+        _STD copy(begin + index, end, ls.begin() + index + length);
+        _STD copy(first, last, ls.begin() + index);
+        _Dealloc(is_long);
+        _Long_str(ls);
+    }
+
+    constexpr void _Insert(size_type index, _CharTy const* first, _CharTy const* last) {
+        if (index > _Size()) {
+            _Throw_out_of_range();
+        }
+
+        auto const length   = static_cast<size_type>(last - first);
+        auto const new_size = _Size() + length;
+        auto const begin    = _Begin();
+        auto const end      = _End();
+        auto const is_long  = _Is_long();
+
+        if !consteval {
+            if (capacity() >= new_size && !_Overlap(first, last, begin, end)) {
+                _STD copy_backward(begin + index, end, begin + new_size);
+                _STD copy(first, last, begin + index);
+                _Resize_shrink(is_long, new_size);
+            } else {
+                _Insert(index, first, last, begin, end, is_long, length, new_size);
+            }
+        } else {
+            _Insert(index, first, last, begin, end, is_long, length, new_size);
+        }
+    }
+
+    constexpr void _Replace(size_type pos, size_type count, _CharTy const* first, _CharTy const* last, _CharTy* begin,
+        _CharTy* end, bool is_long, size_type length, size_type new_size) {
+        auto const ls = _Allocate(new_size, new_size);
+        _STD copy(begin, begin + pos, ls.begin());
+        _STD copy(first, last, ls.begin() + pos);
+        _STD copy(begin + pos + count, end, ls.begin() + pos + length);
+        _Dealloc(is_long);
+        _Long_str(ls);
+    }
+
+    constexpr void _Replace(size_type pos, size_type count, _CharTy const* first, _CharTy const* last) {
+        if (pos > _Size()) {
+            _Throw_out_of_range();
+        }
+
+        count               = (_STD min) (_Size() - pos, count);
+        auto const length   = static_cast<size_type>(last - first);
+        auto const new_size = _Size() - count + length;
+        auto const begin    = _Begin();
+        auto const end      = _End();
+        auto const is_long  = _Is_long();
+
+        if !consteval {
+            if (capacity() >= new_size && !_Overlap(first, last, begin, end)) {
+                if (count < length) {
+                    _STD copy(begin + pos + count, end, begin + pos + length);
+                } else {
+                    _STD copy_backward(begin + pos + count, end, begin + new_size);
+                }
+
+                _STD copy(first, last, begin + pos);
+                _Resize_shrink(is_long, new_size);
+            } else {
+                _Replace(pos, count, first, last, begin, end, is_long, length, new_size);
+            }
+        } else {
+            _Replace(pos, count, first, last, begin, end, is_long, length, new_size);
+        }
+    }
+
+public:
+    constexpr ~basic_string() {
+        _Dealloc(_Is_long());
+    }
+
+    /**
+     * @brief reserve memory
+     * @brief strong exception safety guarantee
+     * @brief never shrink
+     * @param new_cap new capacity
+     */
+    constexpr void reserve(size_type new_cap) {
+        if (new_cap <= capacity()) {
+            return;
+        } else if (new_cap > max_size()) {
+            _Throw_length_error();
+        } else {
+            auto const size    = _Size();
+            auto const begin   = _Begin();
+            auto const end     = _End();
+            auto const is_long = _Is_long();
+            auto const ls      = _Allocate(new_cap, size);
+            _STD copy(begin, end, ls.begin());
+            _Dealloc(is_long);
+            _Long_str(ls);
+        }
+    }
+
+    /**
+     * @brief resize string length
+     * @brief strong exception safety guarantee
+     * @brief never shrink
+     * @param count new size
+     * @param ch character to fill
+     */
+    constexpr void resize(size_type count, value_type ch) {
+        if (auto const size = _Size(); count < size) {
+            _Resize_shrink(_Is_long(), count);
+        } else if (count > size) {
+            reserve(count);
+            _STD fill(_End(), _End() + (count - size), ch);
+            _Resize_shrink(_Is_long(), count);
+        }
+    }
+
+    /**
+     * @brief resize string length
+     * @brief strong exception safety guarantee
+     * @brief never shrink
+     * @param count new size
+     */
+    constexpr void resize(size_type count) {
+        resize(count, _CharTy{});
+    }
+
+    /**
+     * @brief never shrink_to_fit
+     */
+    constexpr void clear() noexcept {
+        _Resize_shrink(_Is_long(), _STD size_t(0));
+    }
+
+    /**
+     * @brief use size * 1.5 for growth
+     * @param ch character to fill
+     */
+    constexpr void push_back(_CharTy ch) {
+        auto const size = _Size();
+        if (capacity() == size) {
+            auto const msize = max_size();
+            if (size >= msize) {
+                _Throw_length_error();
+            }
+            // NB: During constant evaluation, size == cap == 0 may occur
+            reserve((_STD min) (size + _STD size_t(1) + size / _STD size_t(2), msize));
+        }
+
+        *_End() = ch;
+        _Resize_shrink(_Is_long(), size + _STD size_t(1));
+    }
+
+    // ****************************** begin swap ******************************
+
+private:
+    constexpr void swap_without_ator(basic_string& other) noexcept {
+        auto& self = *this;
+        using _STD swap;
+        swap(self._Stor, other._Stor);
+        swap(self._Size_flag, other._Size_flag);
+    }
+
+public:
+    constexpr void swap(basic_string& other) noexcept {
+        using _STD swap;
+        if constexpr (_Atraits_t::propagate_on_container_swap::value) {
+            swap(other._Allocator, other._Allocator);
+        } else {
+            _STL_ASSERT(other._Allocator == _Allocator, "assert: other._Allocator == _Allocator");
+        }
+
+        other.swap_without_ator(*this);
+    }
+
+    friend constexpr void swap(basic_string& lhs, basic_string& rhs) noexcept {
+        lhs.swap(rhs);
+    }
+
+    // *************************** begin constructor ***************************
+
+    constexpr void _Construct(_STD size_t n) {
+
+        if (_Short_str_max >= n) {
+            _Resize_shrink(false, n);
+        } else if (n > max_size()) {
+            _Throw_length_error();
+        } else {
+            _Long_str(_Allocate(n, n));
+        }
+    }
+
+public:
+    constexpr basic_string() noexcept(noexcept(allocator_type())) : _Allocator(allocator_type()) {}
+
+    constexpr explicit basic_string(allocator_type const& a) noexcept : _Allocator(a) {}
+
+    template <typename _IAlloc = _Alloc>
+        requires (_Is_allocator<_IAlloc>::value)
+    constexpr basic_string(size_type count, value_type ch, allocator_type const& a = allocator_type()) : _Allocator(a) {
+        _Construct(count);
+        _STD fill(_Begin(), _End(), ch);
+    }
+
+    template <typename _Uy, typename _Vy>
+        requires _STD
+    input_iterator<_Uy>
+        && (!_STD is_integral_v<_Vy>) constexpr basic_string(
+            _Uy first, _Vy last, const allocator_type& alloc = allocator_type())
+        : _Allocator(alloc) {
+        _Construct_guard g{this};
+
+        if constexpr (_STD random_access_iterator<_Uy>) {
+            _Construct(last - first);
+            _STD copy(first, last, _Begin());
+        } else {
+            for (; first != last; ++first) {
+                push_back(*first);
+            }
+        }
+
+        g.release();
+    }
+
+#if defined(__cpp_lib_containers_ranges) && (__cpp_lib_containers_ranges >= 202202L)
+    // tagged constructors to construct from container compatible range
+    template <_STD ranges::input_range _Ry>
+        requires _STD
+    convertible_to<_STD ranges::range_value_t<_Ry>, _CharTy> constexpr basic_string(
+        _STD from_range_t, _Ry&& rg, allocator_type const& a = allocator_type())
+        : _Allocator(a) {
+        auto first = _STD ranges::begin(rg);
+        auto last  = _STD ranges::end(rg);
+
+        _Construct_guard g{this};
+
+        if constexpr (_STD ranges::sized_range<_Ry>) {
+            _Construct(_STD ranges::size(rg));
+
+            if constexpr (_STD ranges::forward_range<_Ry>) {
+                _STD ranges::copy(_STD ranges::begin(rg), _STD ranges::end(rg), _Begin());
+            } else {
+                for (auto begin = _Begin(); first != last; ++first, ++begin) {
+                    *begin = *first;
+                }
+            }
+        } else {
+            for (; first != last; ++first) {
+                push_back(*first);
+            }
+        }
+
+        g.release();
+    }
+#endif
+
+    constexpr basic_string(_CharTy const* s, size_type count, allocator_type const& a = allocator_type())
+        : _Allocator(a) {
+        _Construct(count);
+        _STD copy(s, s + count, _Begin());
+    }
+
+    template <typename _IAlloc = _Alloc>
+        requires (_Is_allocator<_IAlloc>::value)
+    constexpr basic_string(_CharTy const* s, allocator_type const& a = allocator_type())
+        : basic_string(s, _C_string_length(s), a) {}
+
+    constexpr basic_string(_STD nullptr_t) = delete;
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    explicit constexpr basic_string(_StringViewLike const& t, allocator_type const& a = allocator_type())
+        : basic_string(_STD basic_string_view<value_type, traits_type>{t}.data(),
+              _STD basic_string_view<value_type, traits_type>{t}.size(), a) {}
+
+    template <typename _StringViewLike>
+        requires _STD
+    is_convertible_v<_StringViewLike const&, _STD basic_string_view<value_type, traits_type>> constexpr basic_string(
+        _StringViewLike const& t, size_type pos, size_type n, allocator_type const& a = allocator_type())
+        : _Allocator(a) {
+        _STD basic_string_view<value_type, traits_type> sv = t;
+
+        if (pos > sv.size()) {
+            _Throw_out_of_range();
+        }
+
+        n = (_STD min) (sv.size() - pos, n);
+        _Construct(n);
+        _STD copy(sv.data() + pos, sv.data() + pos + n, _Begin());
+    }
+
+    constexpr basic_string(basic_string const& other)
+        : _Allocator(_Atraits_t::select_on_container_copy_construction(other._Allocator)) {
+        _Construct(other._Size());
+        _STD copy(other._Begin(), other._End(), _Begin());
+    }
+
+    constexpr basic_string(basic_string&& other) noexcept : _Allocator(other._Allocator) {
+        other.swap_without_ator(*this);
+    }
+
+    constexpr basic_string(const basic_string& other, allocator_type const& a) : _Allocator(a) {
+        _Construct(other._Size());
+        _STD copy(other._Begin(), other._End(), _Begin());
+    }
+
+    constexpr basic_string(basic_string const& other, size_type pos, allocator_type const& a = allocator_type())
+        : basic_string(other, pos, npos /* end */, a) {}
+
+    constexpr basic_string(basic_string&& other, allocator_type const& a) : _Allocator(a) {
+        _STL_ASSERT(_Allocator == a, "assert: _Allocator == a");
+
+        if (other._Allocator == _Allocator) {
+            other.swap_without_ator(*this);
+        } else {
+            _Construct(other._Size());
+            _STD copy(other._Begin(), other._End(), _Begin());
+        }
+    }
+
+    constexpr basic_string(
+        basic_string const& other, size_type pos, size_type count, allocator_type const& a = allocator_type())
+        : _Allocator(a) {
+        if (pos > other._Size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (other._Size() - pos, count);
+        _Construct(count);
+        _STD copy(other._Begin() + pos, other._Begin() + pos + count, _Begin());
+    }
+
+    constexpr basic_string(
+        basic_string&& other, size_type pos, size_type count, allocator_type const& a = allocator_type())
+        : _Allocator(a) {
+        _STL_ASSERT(_Allocator == a, "assert: _Allocator == a");
+
+        if (pos > other._Size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (other._Size() - pos, count);
+
+        if (other._Allocator == _Allocator) {
+            if (pos != _STD size_t(0)) {
+                _STD copy(other._Begin() + pos, other._Begin() + pos + count, other._Begin());
+            }
+
+            other._Resize_shrink(other._Is_long(), count);
+            _Stor       = other._Stor;
+            _Size_flag  = other._Size_flag;
+            other._Stor = _Storage_type{};
+            other._Short_str(_STD size_t(0));
+        } else {
+            _Construct(count);
+            _STD copy(other._Begin() + pos, other._Begin() + pos + count, _Begin());
+        }
+    }
+
+    constexpr basic_string(_STD initializer_list<value_type> ilist, allocator_type const& a = allocator_type())
+        : basic_string(ilist.begin(), ilist.size(), a) {}
+
+    // ***************************** begin assign *****************************
+
+private:
+    constexpr void _Copy_ator_and_move(basic_string& str) noexcept {
+        _Dealloc(_Is_long());
+        _Allocator     = str._Allocator;
+        _Stor          = str._Stor;
+        _Size_flag     = str._Size_flag;
+        str._Stor      = {};
+        str._Size_flag = 0u;
+    }
+
+public:
+    constexpr basic_string& assign(const basic_string& str) {
+        if (_STD addressof(str) == this) {
+            return *this;
+        }
+
+        if constexpr (_Atraits_t::propagate_on_container_copy_assignment::value) {
+            if (_Allocator != str._Allocator) {
+                basic_string temp{str, str._Allocator};
+                _Copy_ator_and_move(temp);
+
+                return *this;
+            }
+        }
+
+        _Assign(str._Begin(), str._End());
+
+        return *this;
+    }
+
+    constexpr basic_string& assign(basic_string&& str)
+        noexcept(_Atraits_t::propagate_on_container_move_assignment::value || _Atraits_t::is_always_equal::value) {
+        if constexpr (_Atraits_t::propagate_on_container_move_assignment::value) {
+            _Copy_ator_and_move(str);
+        } else {
+            if constexpr (!_Atraits_t::is_always_equal::value) {
+                if (_Allocator == str._Allocator) {
+                    str.swap_without_ator(*this);
+
+                    return *this;
+                }
+            }
+
+            _Assign(str._Begin(), str._End());
+        }
+
+        return *this;
+    }
+
+    constexpr basic_string& assign(size_type count, _CharTy ch) {
+        if (count > max_size()) {
+            _Throw_length_error();
+        }
+        if (capacity() < count) {
+            auto const size    = _Size();
+            auto const is_long = _Is_long();
+            auto const ls      = _Allocate(count, size);
+            _Dealloc(is_long);
+            _Long_str(ls);
+        }
+
+        auto const is_long = _Is_long();
+        _STD fill(_Begin(), _Begin() + count, ch);
+        _Resize_shrink(is_long, count);
+
+        return *this;
+    }
+
+    constexpr basic_string& assign(_CharTy const* s, size_type count) {
+        _Assign(s, s + count);
+
+        return *this;
+    }
+
+    constexpr basic_string& assign(_CharTy const* s) {
+        _Assign(s, s + _C_string_length(s));
+
+        return *this;
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& assign(_StringViewLike const& t) {
+        _STD basic_string_view<value_type, traits_type> sv = t;
+        _Assign(sv.data(), sv.data() + sv.size());
+
+        return *this;
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& assign(_StringViewLike const& t, size_type pos, size_type count = npos) {
+        _STD basic_string_view<value_type, traits_type> sv = t;
+
+        if (pos > sv.size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (sv.size() - pos, count);
+        _Assign(sv.data() + pos, sv.data() + pos + count);
+
+        return *this;
+    }
+
+    constexpr basic_string& assign(const basic_string& str, size_type pos, size_type count = npos) {
+        if (pos > str._Size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (str._Size() - pos, count);
+        _Assign(str._Begin() + pos, str._Begin() + pos + count);
+
+        return *this;
+    }
+
+    template <typename _Uy, typename _Vy>
+        requires _STD
+    input_iterator<_Uy> && (!_STD is_integral_v<_Vy>) constexpr basic_string& assign(_Uy first, _Vy last) {
+        if constexpr (_STD contiguous_iterator<_Uy> && _STD is_same_v<value_type, _STD iter_value_t<_Uy>>) {
+            _Assign(_STD to_address(first), _STD to_address(first) + _STD distance(first, last));
+        } else {
+            basic_string temp{first, last, _Allocator};
+            _Assign(temp._Begin(), temp._End());
+        }
+
+        return *this;
+    }
+
+    constexpr basic_string& assign(_STD initializer_list<_CharTy> ilist) {
+        _Assign(ilist.begin(), ilist.end());
+
+        return *this;
+    }
+
+    // **************************** begin operator= ****************************
+
+    constexpr basic_string& operator=(const basic_string& str) {
+        return assign(str);
+    }
+
+    constexpr basic_string& operator=(basic_string&& other)
+        noexcept(_Atraits_t::propagate_on_container_move_assignment::value || _Atraits_t::is_always_equal::value) {
+        return assign(_STD move(other));
+    }
+
+    constexpr basic_string& operator=(_CharTy const* s) {
+        return assign(s);
+    }
+
+    constexpr basic_string& operator=(_CharTy ch) {
+        _Resize_shrink(_Is_long(), _STD size_t(1));
+        *_Begin() = ch;
+
+        return *this;
+    }
+
+    constexpr basic_string& operator=(_STD initializer_list<_CharTy> ilist) {
+        return assign(ilist);
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& operator=(_StringViewLike const& t) {
+        return assign(t);
+    }
+
+    constexpr basic_string& operator=(_STD nullptr_t) = delete;
+
+    // ***************************** begin compare *****************************
+
+private:
+    static constexpr _STD strong_ordering _Compare(
+        value_type const* first, size_type size, value_type const* first1, size_type size1) noexcept {
+
+        if !consteval {
+            _STD less_equal less_eq;
+
+            if (less_eq(first, first1) && less_eq(first1, first)) {
+                return size <=> size1;
+            }
+        }
+
+        for (auto const last = first + (_STD min) (size, size1); first != last; ++first, ++first1) {
+            if (*first > *first1) {
+                return _STD strong_ordering::greater;
+            } else if (*first < *first1) {
+                return _STD strong_ordering::less;
+            }
+        }
+
+        return size <=> size1;
+    }
+
+    static constexpr int _Unwrap_stong_ordering(_STD strong_ordering od) noexcept {
+        return od > 0 ? 1 : (od < 0 ? -1 : 0);
+    }
+
+public:
+    friend constexpr _Get_comparison_category_t<_Traits> operator<=>(
+        basic_string const& lhs, basic_string const& rhs) noexcept {
+        return _Compare(lhs._Begin(), lhs._Size(), rhs._Begin(), rhs._Size());
+    }
+
+    // Used to resolve ambiguation with operator== provided by  _STD basic_string_view.
+    friend constexpr _Get_comparison_category_t<_Traits> operator<=>(
+        basic_string const& lhs, _STD basic_string_view<value_type, traits_type> rhs) noexcept {
+        return _Compare(lhs._Begin(), lhs._Size(), rhs.data(), rhs.size());
+    }
+
+    friend constexpr _Get_comparison_category_t<_Traits> operator<=>(
+        basic_string const& lhs, _CharTy const* rhs) noexcept {
+        return _Compare(lhs._Begin(), lhs._Size(), rhs, basic_string::_C_string_length(rhs));
+    }
+
+    constexpr int compare(const basic_string& str) const noexcept {
+        return _Unwrap_stong_ordering(_View() <=> str._View());
+    }
+
+    constexpr int compare(size_type pos1, size_type count1, const basic_string& str) const {
+        return _Unwrap_stong_ordering(_View().substr(pos1, count1) <=> str._View());
+    }
+
+    constexpr int compare(
+        size_type pos1, size_type count1, const basic_string& str, size_type pos2, size_type count2 = npos) const {
+        return _Unwrap_stong_ordering(_View().substr(pos1, count1) <=> str._View().substr(pos2, count2));
+    }
+
+    constexpr int compare(const _CharTy* s) const noexcept {
+        return _Unwrap_stong_ordering(_View() <=> _STD basic_string_view<value_type, traits_type>(s));
+    }
+
+    constexpr int compare(size_type pos1, size_type count1, const _CharTy* s) const {
+        return _Unwrap_stong_ordering(
+            _View().substr(pos1, count1) <=> _STD basic_string_view<value_type, traits_type>(s));
+    }
+
+    constexpr int compare(size_type pos1, size_type count1, const _CharTy* s, size_type count2) const {
+        return _Unwrap_stong_ordering(
+            _View().substr(pos1, count1) <=> _STD basic_string_view<value_type, traits_type>(s, count2));
+    }
+
+    template <class _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr int compare(const _StringViewLike& t) const
+        noexcept(_STD is_nothrow_convertible_v<const _StringViewLike&, _STD basic_string_view<_CharTy, _Traits>>) {
+        _STD basic_string_view<_CharTy, _Traits> tsv = t;
+
+        return _Unwrap_stong_ordering(_View() <=> tsv);
+    }
+
+    template <class _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr int compare(size_type pos1, size_type count1, const _StringViewLike& t) const {
+        _STD basic_string_view<_CharTy, _Traits> tsv = t;
+
+        return _Unwrap_stong_ordering(_View().substr(pos1, count1) <=> tsv);
+    }
+
+    template <class _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr int compare(
+        size_type pos1, size_type count1, const _StringViewLike& t, size_type pos2, size_type count2 = npos) const {
+        _STD basic_string_view<_CharTy, _Traits> tsv = t;
+
+        return _Unwrap_stong_ordering(_View().substr(pos1, count1) <=> tsv.substr(pos2, count2));
+    }
+
+private:
+    constexpr bool static _Equal(
+        _CharTy const* begin, _CharTy const* end, _CharTy const* first, _CharTy const* last) noexcept {
+        if (last - first != end - begin) {
+            return false;
+        }
+
+        if consteval {
+            for (; begin != end; ++begin, ++first) {
+                if (*first != *begin) {
+                    return false;
+                }
+            }
+
+            return true;
+        } else {
+            return begin == end || _STD memcmp(begin, first, (end - begin) * sizeof(_CharTy)) == 0;
+        }
+    }
+
+public:
+    friend constexpr bool operator==(basic_string const& lhs, basic_string const& rhs) noexcept {
+        return _Equal(lhs._Begin(), lhs._End(), rhs._Begin(), rhs._End());
+    }
+
+    // Used to resolve ambiguation with operator== provided by  _STD basic_string_view.
+    friend constexpr bool operator==(
+        basic_string const& lhs, _STD basic_string_view<value_type, traits_type> rhs) noexcept {
+        return _Equal(lhs._Begin(), lhs._End(), rhs.data(), rhs.data() + rhs.size());
+    }
+
+    friend constexpr bool operator==(basic_string const& lhs, _CharTy const* rhs) noexcept {
+        return _Equal(lhs._Begin(), lhs._End(), rhs, rhs + _C_string_length(rhs));
+    }
+
+    // ***************************** begin append *****************************
+
+private:
+    constexpr void _Append(_CharTy const* first, _CharTy const* last, _CharTy* begin, _CharTy* end, bool is_long,
+        size_type size, size_type new_size) {
+        auto const ls = _Allocate(new_size, new_size);
+        _STD copy(begin, end, ls.begin());
+        _STD copy(first, last, ls.begin() + size);
+        _Dealloc(is_long);
+        _Long_str(ls);
+    }
+
+    constexpr void _Append(_CharTy const* first, _CharTy const* last) {
+        auto const length   = static_cast<size_type>(last - first);
+        auto const size     = _Size();
+        auto const begin    = _Begin();
+        auto const end      = _End();
+        auto const new_size = size + length;
+        auto const is_long  = _Is_long();
+
+        if !consteval {
+            if (capacity() >= new_size && !_Overlap(first, last, begin, end)) {
+                _STD copy(first, last, end);
+                _Resize_shrink(is_long, new_size);
+            } else {
+                _Append(first, last, begin, end, is_long, size, new_size);
+            }
+        } else {
+            _Append(first, last, begin, end, is_long, size, new_size);
+        }
+    }
+
+public:
+    constexpr basic_string& append(size_type count, _CharTy ch) {
+        auto const size = _Size();
+        reserve(size + count);
+        _STD fill(_End(), _End() + count, ch);
+        _Resize_shrink(_Is_long(), size + count);
+
+        return *this;
+    }
+
+    constexpr basic_string& append(_CharTy const* s, size_type count) {
+        _Append(s, s + count);
+
+        return *this;
+    }
+
+    constexpr basic_string& append(_CharTy const* s) {
+        _Append(s, s + _C_string_length(s));
+
+        return *this;
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& append(_StringViewLike const& t) {
+        _STD basic_string_view<value_type, traits_type> sv = t;
+        _Append(sv.data(), sv.data() + sv.size());
+
+        return *this;
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& append(_StringViewLike const& t, size_type pos, size_type count = npos) {
+        _STD basic_string_view<value_type, traits_type> sv = t;
+
+        if (pos > sv.size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (sv.size() - pos, count);
+        _Append(sv.data() + pos, sv.data() + pos + count);
+
+        return *this;
+    }
+
+    constexpr basic_string& append(const basic_string& str) {
+        _Append(str._Begin(), str._End());
+
+        return *this;
+    }
+
+    constexpr basic_string& append(const basic_string& str, size_type pos, size_type count = npos) {
+        if (pos > str._Size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (str._Size() - pos, count);
+        _Append(str._Begin() + pos, str._Begin() + pos + count);
+
+        return *this;
+    }
+
+    template <typename _Uy, typename _Vy>
+        requires _STD
+    input_iterator<_Uy> && (!_STD is_integral_v<_Vy>) constexpr basic_string& append(_Uy first, _Vy last) {
+        if constexpr (_STD contiguous_iterator<_Uy> && _STD is_same_v<value_type, _STD iter_value_t<_Uy>>) {
+            _Append(_STD to_address(first), _STD to_address(first) + _STD distance(first, last));
+        } else {
+            basic_string temp{first, last, _Allocator};
+            _Append(temp._Begin(), temp._End());
+        }
+
+        return *this;
+    }
+
+    constexpr basic_string& append(_STD initializer_list<_CharTy> ilist) {
+        _Append(ilist.begin(), ilist.end());
+
+        return *this;
+    }
+
+    // *************************** begin operator+= ***************************
+
+    constexpr basic_string& operator+=(const basic_string& str) {
+        return append(str);
+    }
+
+    constexpr basic_string& operator+=(_CharTy ch) {
+        push_back(ch);
+
+        return *this;
+    }
+
+    constexpr basic_string& operator+=(_CharTy const* s) {
+        return append(s);
+    }
+
+    constexpr basic_string& operator+=(_STD initializer_list<_CharTy> ilist) {
+        return append(ilist);
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& operator+=(_StringViewLike const& t) {
+        return append(t);
+    }
+
+    // ***************************** begin search *****************************
+
+public:
+    constexpr bool starts_with(_STD basic_string_view<value_type, traits_type> sv) const noexcept {
+        return sv.size() <= _Size() && _Equal(sv.data(), sv.data() + sv.size(), _Begin(), _Begin() + sv.size());
+    }
+
+    constexpr bool _Starts_with(_STD basic_string_view<value_type, traits_type> sv) const noexcept {
+        return sv.size() <= _Size() && _Equal(sv.data(), sv.data() + sv.size(), _Begin(), _Begin() + sv.size());
+    }
+
+    constexpr bool starts_with(_CharTy ch) const noexcept {
+        return *_Begin() == ch;
+    }
+
+    constexpr bool starts_with(_CharTy const* s) const {
+        auto const length = _C_string_length(s);
+
+        return length <= _Size() && _Equal(s, s + length, _Begin(), _Begin() + length);
+    }
+
+    constexpr bool ends_with(_STD basic_string_view<value_type, traits_type> sv) const noexcept {
+        return sv.size() <= _Size() && _Equal(sv.data(), sv.data() + sv.size(), _End() - sv.size(), _End());
+    }
+
+    constexpr bool ends_with(_CharTy ch) const noexcept {
+        return !empty() && *(_End() - 1) == ch;
+    }
+
+    constexpr bool ends_with(_CharTy const* s) const {
+        auto const length = _C_string_length(s);
+
+        return length <= _Size() && _Equal(s, s + length, _End() - length, _End());
+    }
+
+#if defined(__cpp_lib_string_contains) && (__cpp_lib_string_contains >= 202011L)
+    constexpr bool contains(_STD basic_string_view<value_type, traits_type> sv) const noexcept {
+        return _View().contains(sv);
+    }
+
+    constexpr bool contains(_CharTy ch) const noexcept {
+        for (auto begin = _Begin(), end = _End(); begin != end; ++begin) {
+            if (*begin == ch) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    constexpr bool contains(_CharTy const* s) const noexcept {
+        return _View().contains(s);
+    }
+#endif
+
+    // ***************************** begin substr *****************************
+
+    constexpr basic_string substr(size_type pos = _STD size_t(0), size_type count = npos) const& {
+        return basic_string{*this, pos, count};
+    }
+
+    constexpr basic_string substr(size_type pos = _STD size_t(0), size_type count = npos) && {
+        return basic_string{_STD move(*this), pos, count};
+    }
+
+    // ***************************** begin insert *****************************
+
+    constexpr basic_string& insert(size_type index, size_type count, value_type ch) {
+        if (index > _Size()) {
+            _Throw_out_of_range();
+        }
+
+        auto const new_size = _Size() + count;
+        auto const begin    = _Begin();
+        auto const end      = _End();
+        auto const is_long  = _Is_long();
+
+        if (capacity() >= new_size) {
+            _STD copy_backward(begin + index, end, end + count);
+            _STD fill(begin + index, begin + index + count, ch);
+            _Resize_shrink(is_long, new_size);
+        } else {
+            auto const ls = _Allocate(new_size, new_size);
+            _STD copy(begin, begin + index, ls.begin());
+            _STD copy(begin + index, end, ls.begin() + index + count);
+            _STD fill(ls.begin() + index, ls.begin() + index + count, ch);
+            _Dealloc(is_long);
+            _Long_str(ls);
+        }
+
+        return *this;
+    }
+
+    constexpr basic_string& insert(size_type index, _CharTy const* s) {
+        _Insert(index, s, s + _C_string_length(s));
+
+        return *this;
+    }
+
+    constexpr basic_string& insert(size_type index, _CharTy const* s, size_type count) {
+        _Insert(index, s, s + count);
+
+        return *this;
+    }
+
+    constexpr basic_string& insert(size_type index, const basic_string& str) {
+        _Insert(index, str._Begin(), str._End());
+
+        return *this;
+    }
+
+    constexpr basic_string& insert(
+        size_type index, const basic_string& str, size_type s_index, size_type count = npos) {
+        if (s_index > str._Size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (str._Size() - s_index, count);
+        _Insert(index, str._Begin() + s_index, str._Begin() + s_index + count);
+
+        return *this;
+    }
+
+    constexpr iterator insert(const_iterator pos, _CharTy ch) {
+        _STL_ASSERT(pos._Current >= _Begin() && pos._Current <= _End(),
+            "assert: pos._Current >= _Begin() && pos._Current <= _End()");
+        auto const size    = _Size();
+        auto const begin   = _Begin();
+        auto const index   = begin + (pos._Current - begin);
+        auto const end     = _End();
+        auto const is_long = _Is_long();
+
+        if (capacity() >= size + _STD size_t(1)) {
+            _STD copy_backward(index, end, end + _STD size_t(1));
+            *index = ch;
+            _Resize_shrink(is_long, size + 1);
+
+#if defined(_DEBUG)
+            return {index, begin, end};
+#else
+            return {index};
+#endif
+        } else {
+            auto const ls = _Allocate(size * _STD size_t(2) - size / _STD size_t(2), size + _STD size_t(1));
+            _STD copy(begin, index, ls.begin());
+            auto const new_index = ls.begin() + (index - begin);
+            *new_index           = ch;
+            _STD copy(index, end, new_index + _STD size_t(1));
+            _Dealloc(is_long);
+            _Long_str(ls);
+
+#if defined(_DEBUG)
+            return {new_index, ls.begin(), ls.end()};
+#else
+            return {new_index};
+#endif
+        }
+    }
+
+    constexpr iterator insert(const_iterator pos, size_type count, _CharTy ch) {
+        auto const index = pos._Current - _Begin();
+        insert(index, count, ch);
+
+        return begin() + index;
+    }
+
+    template <typename _Uy, typename _Vy>
+        requires _STD
+    input_iterator<_Uy>
+        && (!_STD is_integral_v<_Vy>) constexpr iterator insert(const_iterator pos, _Uy first, _Vy last) {
+        _STL_ASSERT(pos._Current >= _Begin() && pos._Current <= _End(),
+            "assert: pos._Current >= _Begin() && pos._Current <= _End()");
+        auto const index = pos._Current - _Begin();
+
+        if constexpr (_STD contiguous_iterator<_Uy> && _STD is_same_v<value_type, _STD iter_value_t<_Uy>>) {
+            _Insert(index, _STD to_address(first), _STD to_address(first) + _STD distance(first, last));
+        } else {
+            basic_string temp{first, last, _Allocator};
+            _Insert(index, temp._Begin(), temp._End());
+        }
+
+        return begin() + index;
+    }
+
+    constexpr iterator insert(const_iterator pos, _STD initializer_list<_CharTy> ilist) {
+        auto const index = pos._Current - _Begin();
+        _Insert(index, ilist.begin(), ilist.begin() + ilist.size());
+
+        return begin() + index;
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& insert(size_type pos, _StringViewLike const& t) {
+        _STD basic_string_view<value_type, traits_type> sv = t;
+        _Insert(pos, sv.data(), sv.data() + sv.size());
+
+        return *this;
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& insert(size_type pos, _StringViewLike const& t, size_type t_index, size_type count = npos) {
+        _STD basic_string_view<value_type, traits_type> sv = t;
+
+        if (t_index > sv.size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (sv.size() - t_index, count);
+        _Insert(pos, sv.data() + t_index, sv.data() + t_index + count);
+
+        return *this;
+    }
+
+    // ****************************** begin erase ******************************
+
+private:
+    constexpr void _Erase(_CharTy* first, _CharTy const* last) noexcept {
+        _STL_ASSERT(first >= _Begin() && last <= _End(), "assert: first >= _Begin() && last <= _End()");
+        auto const is_long = _Is_long();
+        auto const size    = _Size();
+        _STD copy(last, static_cast<_CharTy const*>(_End()), first);
+        _Resize_shrink(is_long, size - (last - first));
+    }
+
+public:
+    constexpr basic_string& erase(size_type index = _STD size_t(0), size_type count = npos) {
+        if (index > _Size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (_Size() - index, count);
+        _Erase(_Begin() + index, _Begin() + index + count);
+
+        return *this;
+    }
+
+    constexpr iterator erase(const_iterator position) noexcept {
+        auto const start = _Begin() + (position._Current - _Begin());
+        _STL_ASSERT(start >= _Begin() && start < _End(), "assert: start >= _Begin() && start < _End()");
+        auto const is_long = _Is_long();
+        auto const size    = _Size();
+        _STD copy(start + _STD size_t(1), _End(), start);
+        _Resize_shrink(is_long, size - _STD size_t(1));
+
+#if defined(_DEBUG)
+        return {start, _Begin(), _End()};
+#else
+        return {start};
+#endif
+    }
+
+    constexpr iterator erase(const_iterator first, const_iterator last) noexcept {
+        auto const start = _Begin() + (first._Current - _Begin());
+        _Erase(start, last._Current);
+
+#if defined(_DEBUG)
+        return {start, _Begin(), _End()};
+#else
+        return {start};
+#endif
+    }
+
+    // **************************** begin pop_back ****************************
+
+    constexpr void pop_back() noexcept {
+        _STL_ASSERT(!empty(), "assert: !empty()");
+        _Resize_shrink(_Is_long(), _Size() - _STD size_t(1));
+    }
+
+    // ***************************** begin replace *****************************
+
+    constexpr basic_string& replace(size_type pos, size_type count, const basic_string& str) {
+        _Replace(pos, count, str._Begin(), str._End());
+
+        return *this;
+    }
+
+    constexpr basic_string& replace(const_iterator first, const_iterator last, const basic_string& str) {
+        auto const start = first._Current;
+        _STL_ASSERT(start >= _Begin() && start <= _End() && first <= last,
+            "assert: start >= _Begin() && start <= _End() && first <= last");
+        _Replace(start - _Begin(), last - first, str._Begin(), str._End());
+
+        return *this;
+    }
+
+    constexpr basic_string& replace(
+        size_type pos, size_type count, const basic_string& str, size_type pos2, size_type count2 = npos) {
+        if (pos2 > str._Size()) {
+            _Throw_out_of_range();
+        }
+
+        count2 = (_STD min) (count2, str._Size() - pos2);
+        _Replace(pos, count, str._Begin() + pos2, str._Begin() + pos2 + count2);
+
+        return *this;
+    }
+
+    constexpr basic_string& replace(size_type pos, size_type count, _CharTy const* cstr, size_type count2) {
+        _Replace(pos, count, cstr, cstr + count2);
+
+        return *this;
+    }
+
+    constexpr basic_string& replace(const_iterator first, const_iterator last, _CharTy const* cstr, size_type count2) {
+        _STL_ASSERT(first >= begin() && last <= end() && first <= last,
+            "assert: first >= begin() && last <= end() && first <= last");
+        _Replace(first._Current - _Begin(), last - first, cstr, cstr + count2);
+
+        return *this;
+    }
+
+    constexpr basic_string& replace(size_type pos, size_type count, _CharTy const* cstr) {
+        _Replace(pos, count, cstr, cstr + _C_string_length(cstr));
+
+        return *this;
+    }
+
+    constexpr basic_string& replace(const_iterator first, const_iterator last, _CharTy const* cstr) {
+        _STL_ASSERT(first >= begin() && last <= end() && first <= last,
+            "assert: first >= begin() && last <= end() && first <= last");
+        _Replace(first._Current - _Begin(), last - first, cstr, cstr + _C_string_length(cstr));
+
+        return *this;
+    }
+
+    constexpr basic_string& replace(const_iterator first, const_iterator last, _STD initializer_list<_CharTy> ilist) {
+        _STL_ASSERT(first <= last, "assert: first <= last");
+        _Replace(first._Current - _Begin(), last - first, ilist.begin(), ilist.begin() + ilist.size());
+
+        return *this;
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& replace(size_type pos, size_type count, const _StringViewLike& t) {
+        _STD basic_string_view<value_type, traits_type> sv = t;
+        _Replace(pos, count, sv.data(), sv.data() + sv.size());
+
+        return *this;
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& replace(const_iterator first, const_iterator last, const _StringViewLike& t) {
+        _STL_ASSERT(first >= begin() && last <= end() && first <= last,
+            "assert: first >= begin() && last <= end() && first <= last");
+        _STD basic_string_view<value_type, traits_type> sv = t;
+        _Replace(first._Current - _Begin(), static_cast<size_type>(last - first), sv.data(), sv.data() + sv.size());
+
+        return *this;
+    }
+
+    template <typename _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr basic_string& replace(
+        size_type pos, size_type count, const _StringViewLike& t, size_type pos2, size_type count2 = npos) {
+        _STD basic_string_view<value_type, traits_type> sv = t;
+
+        if (pos2 > sv.size()) {
+            _Throw_out_of_range();
+        }
+
+        count2 = (_STD min) (sv.size() - pos2, count2);
+        _Replace(pos, count, sv.data() + pos2, sv.data() + pos2 + count2);
+
+        return *this;
+    }
+
+    constexpr basic_string& replace(size_type pos, size_type count, size_type count2, _CharTy ch) {
+        if (pos > _Size()) {
+            _Throw_out_of_range();
+        }
+
+        count               = (_STD min) (_Size() - pos, count);
+        auto const size     = _Size();
+        auto const new_size = size - count + count2;
+        auto const begin    = _Begin();
+        auto const end      = _End();
+        auto const is_long  = _Is_long();
+
+        if (capacity() >= new_size) {
+            if (count > count2) {
+                _STD copy(begin + pos + count, end, begin + pos + count2);
+            } else if (count < count2) {
+                _STD copy_backward(begin + pos + count, end, begin + new_size);
+            }
+
+            _STD fill(begin + pos, begin + pos + count2, ch);
+            _Resize_shrink(is_long, new_size);
+        } else {
+            auto const ls = _Allocate(new_size, new_size);
+            _STD copy(begin, begin + pos, ls.begin());
+            _STD copy(begin + pos + count, end, ls.begin() + pos + count2);
+            _STD fill(ls.begin() + pos, ls.begin() + pos + count2, ch);
+            _Dealloc(is_long);
+            _Long_str(ls);
+        }
+
+        return *this;
+    }
+
+    constexpr basic_string& replace(const_iterator first, const_iterator last, size_type count2, _CharTy ch) {
+        _STL_ASSERT(first <= last, "assert: first <= last");
+        replace(first._Current - _Begin(), last - first, count2, ch);
+
+        return *this;
+    }
+
+    template <typename _Uy, typename _Vy>
+        requires _STD
+    input_iterator<_Uy>
+        && (!_STD is_integral_v<_Vy>) constexpr basic_string& replace(
+            const_iterator first, const_iterator last, _Uy first2, _Vy last2) {
+        _STL_ASSERT(first <= last, "assert: first <= last");
+        if constexpr (_STD contiguous_iterator<_Uy> && _STD is_same_v<value_type, _STD iter_value_t<_Uy>>) {
+            _Replace(first._Current - _Begin(), last - first, _STD to_address(first2),
+                _STD to_address(first2) + _STD distance(first2, last2));
+        } else {
+            basic_string temp{first2, last2, _Allocator};
+            _Replace(first._Current - _Begin(), last - first, temp._Begin(), temp._End());
+        }
+
+        return *this;
+    }
+
+    // ************* begin assign_range/insert_range/append_range *************
+
+#if defined(__cpp_lib_containers_ranges) && (__cpp_lib_containers_ranges >= 202202L)
+    template <_STD ranges::input_range _Ry>
+        requires _STD
+    convertible_to<_STD ranges::range_value_t<_Ry>, _CharTy> constexpr basic_string& assign_range(_Ry&& rg) {
+        if constexpr (_STD ranges::contiguous_range<_Ry>
+                      && _STD is_same_v<value_type, _STD ranges::range_value_t<_Ry>>) {
+            auto const first = _STD ranges::begin(rg);
+            auto const last  = _STD ranges::end(rg);
+            _Assign(_STD to_address(first), _STD to_address(first) + _STD ranges::distance(first, last));
+        } else {
+            assign(basic_string(_STD from_range, _STD forward<_Ry>(rg), _Allocator));
+        }
+
+        return *this;
+    }
+
+    template <_STD ranges::input_range _Ry>
+        requires _STD
+    convertible_to<_STD ranges::range_value_t<_Ry>, _CharTy> constexpr iterator insert_range(
+        const_iterator pos, _Ry&& rg) {
+        auto const index = pos - begin();
+
+        if constexpr (_STD ranges::contiguous_range<_Ry>
+                      && _STD is_same_v<value_type, _STD ranges::range_value_t<_Ry>>) {
+            auto const first = _STD ranges::begin(rg);
+            auto const last  = _STD ranges::end(rg);
+            _Insert(index, _STD to_address(first), _STD to_address(first) + _STD ranges::distance(first, last));
+        } else {
+            insert(index, basic_string(_STD from_range, _STD forward<_Ry>(rg), _Allocator));
+        }
+
+        return begin() + index;
+    }
+
+    template <_STD ranges::input_range _Ry>
+        requires _STD
+    convertible_to<_STD ranges::range_value_t<_Ry>, _CharTy> constexpr basic_string& append_range(_Ry&& rg) {
+        if constexpr (_STD ranges::contiguous_range<_Ry>
+                      && _STD is_same_v<value_type, _STD ranges::range_value_t<_Ry>>) {
+            auto const first = _STD ranges::begin(rg);
+            auto const last  = _STD ranges::end(rg);
+            _Append(_STD to_address(first), _STD to_address(first) + _STD ranges::distance(first, last));
+        } else {
+            append(basic_string(_STD from_range, _STD forward<_Ry>(rg), _Allocator));
+        }
+
+        return *this;
+    }
+
+    template <_STD ranges::input_range _Ry>
+        requires _STD
+    convertible_to<_STD ranges::range_value_t<_Ry>, _CharTy> constexpr basic_string& replace_with_range(
+        const_iterator first, const_iterator last, _Ry&& rg) {
+        if constexpr (_STD ranges::contiguous_range<_Ry>
+                      && _STD is_same_v<value_type, _STD ranges::range_value_t<_Ry>>) {
+            auto const first2 = _STD ranges::begin(rg);
+            auto const last2  = _STD ranges::end(rg);
+            _Replace(first._Current - _Begin(), last - first, _STD to_address(first2),
+                _STD to_address(first2) + _STD ranges::distance(first2, last2));
+        } else {
+            replace(first, last, basic_string(_STD from_range, _STD forward<_Ry>(rg), _Allocator));
+        }
+
+        return *this;
+    }
+#endif
+
+    template <class _Operation>
+    constexpr void resize_and_overwrite(size_type count, _Operation op) {
+        reserve(count);
+        _Resize_shrink(_Is_long(), _STD move(op)(_Begin(), size_type(count)));
+    }
+
+    constexpr allocator_type get_allocator() const noexcept {
+        return _Allocator;
+    }
+
+    constexpr size_type copy(_CharTy* dest, size_type count, size_type pos = _STD size_t(0)) const {
+        if (pos > _Size()) {
+            _Throw_out_of_range();
+        }
+
+        count = (_STD min) (count, _Size() - pos);
+
+        _STD copy(_Begin() + pos, _Begin() + pos + count, dest);
+
+        return count;
+    }
+
+    constexpr size_type find(const basic_string& str, size_type pos = _STD size_t(0)) const {
+        return _View().find(str._View(), pos);
+    }
+
+    constexpr size_type find(const _CharTy* s, size_type pos, size_type count) const {
+        return _View().find(s, pos, count);
+    }
+
+    constexpr size_type find(const _CharTy* s, size_type pos = _STD size_t(0)) const {
+        return _View().find(s, pos);
+    }
+
+    constexpr size_type find(_CharTy ch, size_type pos = _STD size_t(0)) const {
+        return _View().find(ch, pos);
+    }
+
+    template <class _StringViewLike>
+        requires _Is_svlike_v<_StringViewLike>
+    constexpr size_type find(const _StringViewLike& t, size_type pos = _STD size_t(0)) const
+        noexcept(_STD is_nothrow_convertible_v<const _StringViewLike&, _STD basic_string_view<_CharTy, _Traits>>) {
+        _STD basic_string_view<_CharTy, _Traits> tsv = t;
+
+        return _View().find(tsv, pos);
+    }
+
+    constexpr size_type rfind(const basic_string& str, size_type pos = npos) const {
+        return _View().rfind(str._View(), pos);
+    }
+
+    constexpr size_type rfind(const _CharTy* s, size_type pos, size_type count) const {
+        return _View().rfind(s, pos, count);
+    }
+
+    constexpr size_type rfind(const _CharTy* s, size_type pos = npos) const {
+        return _View().rfind(s, pos);
+    }
+
+    constexpr size_type rfind(_CharTy ch, size_type pos = npos) const {
+        return _View().rfind(ch, pos);
+    }
+
+    template <class _StringViewLike>
+    constexpr size_type rfind(const _StringViewLike& t, size_type pos = npos) const
+        noexcept(_STD is_nothrow_convertible_v<const _StringViewLike&, _STD basic_string_view<_CharTy, _Traits>>) {
+        _STD basic_string_view<_CharTy, _Traits> tsv = t;
+
+        return _View().rfind(tsv, pos);
+    }
+
+    constexpr size_type find_first_of(const basic_string& str, size_type pos = _STD size_t(0)) const {
+        return _View().find_first_of(str._View(), pos);
+    }
+
+    constexpr size_type find_first_of(const _CharTy* s, size_type pos, size_type count) const {
+        return _View().find_first_of(s, pos, count);
+    }
+
+    constexpr size_type find_first_of(const _CharTy* s, size_type pos = _STD size_t(0)) const {
+        return _View().find_first_of(s, pos);
+    }
+
+    constexpr size_type find_first_of(_CharTy ch, size_type pos = _STD size_t(0)) const {
+        return _View().find_first_of(ch, pos);
+    }
+
+    template <class _StringViewLike>
+    constexpr size_type find_first_of(const _StringViewLike& t, size_type pos = _STD size_t(0)) const
+        noexcept(_STD is_nothrow_convertible_v<const _StringViewLike&, _STD basic_string_view<_CharTy, _Traits>>) {
+        _STD basic_string_view<_CharTy, _Traits> tsv = t;
+
+        return _View().find_first_of(tsv, pos);
+    }
+
+    constexpr size_type find_first_not_of(const basic_string& str, size_type pos = _STD size_t(0)) const {
+        return _View().find_first_not_of(str._View(), pos);
+    }
+
+    constexpr size_type find_first_not_of(const _CharTy* s, size_type pos, size_type count) const {
+        return _View().find_first_not_of(s, pos, count);
+    }
+
+    constexpr size_type find_first_not_of(const _CharTy* s, size_type pos = _STD size_t(0)) const {
+        return _View().find_first_not_of(s, pos);
+    }
+
+    constexpr size_type find_first_not_of(_CharTy ch, size_type pos = _STD size_t(0)) const {
+        return _View().find_first_not_of(ch, pos);
+    }
+
+    template <class _StringViewLike>
+    constexpr size_type find_first_not_of(const _StringViewLike& t, size_type pos = _STD size_t(0)) const
+        noexcept(_STD is_nothrow_convertible_v<const _StringViewLike&, _STD basic_string_view<_CharTy, _Traits>>) {
+        _STD basic_string_view<_CharTy, _Traits> tsv = t;
+
+        return _View().find_first_not_of(tsv, pos);
+    }
+
+    constexpr size_type find_last_of(const basic_string& str, size_type pos = npos) const {
+        return _View().find_last_of(str._View(), pos);
+    }
+
+    constexpr size_type find_last_of(const _CharTy* s, size_type pos, size_type count) const {
+        return _View().find_last_of(s, pos, count);
+    }
+
+    constexpr size_type find_last_of(const _CharTy* s, size_type pos = npos) const {
+        return _View().find_last_of(s, pos);
+    }
+
+    constexpr size_type find_last_of(_CharTy ch, size_type pos = npos) const {
+        return _View().find_last_of(ch, pos);
+    }
+
+    template <class _StringViewLike>
+    constexpr size_type find_last_of(const _StringViewLike& t, size_type pos = npos) const
+        noexcept(_STD is_nothrow_convertible_v<const _StringViewLike&, _STD basic_string_view<_CharTy, _Traits>>) {
+        _STD basic_string_view<_CharTy, _Traits> tsv = t;
+
+        return _View().find_last_of(tsv, pos);
+    }
+
+    constexpr size_type find_last_not_of(const basic_string& str, size_type pos = npos) const {
+        return _View().find_last_not_of(str._View(), pos);
+    }
+
+    constexpr size_type find_last_not_of(const _CharTy* s, size_type pos, size_type count) const {
+        return _View().find_last_not_of(s, pos, count);
+    }
+
+    constexpr size_type find_last_not_of(const _CharTy* s, size_type pos = npos) const {
+        return _View().find_last_not_of(s, pos);
+    }
+
+    constexpr size_type find_last_not_of(_CharTy ch, size_type pos = npos) const {
+        return _View().find_last_not_of(ch, pos);
+    }
+
+    template <class _StringViewLike>
+    constexpr size_type find_last_not_of(const _StringViewLike& t, size_type pos = npos) const
+        noexcept(_STD is_nothrow_convertible_v<const _StringViewLike&, _STD basic_string_view<_CharTy, _Traits>>) {
+        _STD basic_string_view<_CharTy, _Traits> tsv = t;
+
+        return _View().find_last_not_of(tsv, pos);
+    }
+
+
+    template <class _Operation>
+    constexpr void _Resize_and_overwrite(size_type count, _Operation op) {
+        reserve(count);
+        _Resize_shrink(_Is_long(), _STD move(op)(_Begin(), size_type(count)));
+    }
+
+    constexpr bool _Move_assign_from_buffer(
+        value_type* const _Right, const size_type _Sz, const size_type _Actual_allocation_size) {
+        // Move assign from a buffer, used exclusively by basic_stringbuf; returns _Is_long()
+        // The caller (basic_stringbuf) guarantees there is space to store the null terminator but does not set it.
+        _STL_ASSERT(_Sz < _Actual_allocation_size, "assert: _Sz < _Actual_allocation_size");
+        _STL_ASSERT(_Size_flag == 0, "assert: _Size_flag == 0");
+        _STL_ASSERT(_Right != nullptr, "assert: _Right != nullptr");
+        // Strange condition; a detailed investigation is needed before modifying it.
+        if (_Actual_allocation_size < _Short_str_max) {
+            _STD copy(_Right, _Right + _Sz, _Stor._Ss.data());
+            _Size_flag                       = static_cast<unsigned char>(_Sz);
+            *(_Stor._Ss.data() + _Size_flag) = {};
+            return false;
+        } else {
+            _Ls_type ls;
+            ls._Begin = _Right;
+            ls._End   = _Right + _Sz;
+            ls._Last  = _Right + _Actual_allocation_size - _STD size_t(1);
+            _Long_str(ls);
+            return true;
+        }
+    }
+
+    // No instance of this type can exist where an exception may be thrown.
+    struct _Released_buffer {
+        pointer _Ptr;
+        size_type _Size;
+        size_type _Actual_allocation_size;
+    };
+
+    _Released_buffer _Release_to_buffer([[maybe_unused]] _Alloc&) {
+        // Ensure the string is in dynamically allocated memory; used exclusively by basic_stringbuf
+        // The caller (basic_stringbuf) ensures the allocator is consistent; no check is needed.
+        reserve(_Short_str_max + _STD size_t(1));
+        auto ls    = _Long_str();
+        _Stor._Ss  = _Ss_type{};
+        _Size_flag = {};
+        return {ls._Begin, static_cast<size_type>(ls._End - ls._Begin),
+            static_cast<size_type>(ls._Last - ls._Begin) + _STD size_t(1)};
+    }
+
+    constexpr allocator_type& _Getal() noexcept {
+        return _Allocator;
+    }
+
+    constexpr allocator_type const& _Getal() const noexcept {
+        return _Allocator;
+    }
+
+    constexpr void _Orphan_all() const noexcept {}
+
+    constexpr void reserve() {}
+};
+
+template <_STD input_iterator _InputIterator,
+    string_detail::mini_alloc _Alloc = _STD allocator<typename _STD iterator_traits<_InputIterator>::value_type>>
+basic_string(_InputIterator, _InputIterator, _Alloc = _Alloc())
+    -> basic_string<typename _STD iterator_traits<_InputIterator>::value_type,
+        _STD char_traits<typename _STD iterator_traits<_InputIterator>::value_type>, _Alloc>;
+
+template <_STD ranges::input_range _Ry,
+    string_detail::mini_alloc _Alloc = _STD allocator<_STD ranges::range_value_t<_Ry>>>
+basic_string(_STD from_range_t, _Ry&&, _Alloc = _Alloc())
+    -> basic_string<_STD ranges::range_value_t<_Ry>, _STD char_traits<_STD ranges::range_value_t<_Ry>>, _Alloc>;
+
+template <class _CharTy, class _Traits, string_detail::mini_alloc _Alloc = _STD allocator<_CharTy>>
+explicit basic_string(_STD basic_string_view<_CharTy, _Traits>, const _Alloc& = _Alloc())
+    -> basic_string<_CharTy, _Traits, _Alloc>;
+
+template <class _CharTy, class _Traits, string_detail::mini_alloc _Alloc = _STD allocator<_CharTy>>
+basic_string(_STD basic_string_view<_CharTy, _Traits>, _STD size_t, _STD size_t, const _Alloc& = _Alloc())
+    -> basic_string<_CharTy, _Traits, _Alloc>;
+
+template <class _CharTy, class _Traits, string_detail::mini_alloc _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    const _STD basic_string<_CharTy, _Traits, _Alloc>& lhs, const _STD basic_string<_CharTy, _Traits, _Alloc>& rhs) {
+    _STD basic_string<_CharTy, _Traits, _Alloc> r{
+        _STD allocator_traits<_Alloc>::select_on_container_copy_construction(lhs.get_allocator())};
+    r.reserve(lhs.size() + rhs.size());
+    r.append(lhs);
+    r.append(rhs);
+
+    return r;
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    const _STD basic_string<_CharTy, _Traits, _Alloc>& lhs, const _CharTy* rhs) {
+    _STD basic_string<_CharTy, _Traits, _Alloc> r{
+        _STD allocator_traits<_Alloc>::select_on_container_copy_construction(lhs.get_allocator())};
+    auto rsize = lhs._C_string_length(rhs);
+    r.reserve(lhs.size() + rsize);
+    r.append(lhs);
+    r.append(rhs, rsize);
+
+    return r;
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    const _STD basic_string<_CharTy, _Traits, _Alloc>& lhs, const _CharTy rhs) {
+    _STD basic_string<_CharTy, _Traits, _Alloc> r{
+        _STD allocator_traits<_Alloc>::select_on_container_copy_construction(lhs.get_allocator())};
+    r.reserve(lhs.size() + _STD size_t(1));
+    r.append(lhs);
+    r.push_back(rhs);
+
+    return r;
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    const _STD basic_string<_CharTy, _Traits, _Alloc>& lhs,
+    _STD type_identity_t<_STD basic_string_view<_CharTy, _Traits>> rhs) {
+    _STD basic_string<_CharTy, _Traits, _Alloc> r{
+        _STD allocator_traits<_Alloc>::select_on_container_copy_construction(lhs.get_allocator())};
+    r.reserve(lhs.size() + rhs.size());
+    r.append(lhs);
+    r.append(rhs);
+
+    return r;
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    const _CharTy* lhs, const _STD basic_string<_CharTy, _Traits, _Alloc>& rhs) {
+    _STD basic_string<_CharTy, _Traits, _Alloc> r{
+        _STD allocator_traits<_Alloc>::select_on_container_copy_construction(rhs.get_allocator())};
+    auto lsize = rhs._C_string_length(lhs);
+    r.reserve(lsize + rhs.size());
+    r.append(lhs, lsize);
+    r.append(rhs);
+
+    return r;
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    _CharTy lhs, const _STD basic_string<_CharTy, _Traits, _Alloc>& rhs) {
+    _STD basic_string<_CharTy, _Traits, _Alloc> r{
+        _STD allocator_traits<_Alloc>::select_on_container_copy_construction(rhs.get_allocator())};
+    r.reserve(_STD size_t(1) + rhs.size());
+    r.push_back(lhs);
+    r.append(rhs);
+
+    return r;
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    _STD type_identity_t<_STD basic_string_view<_CharTy, _Traits>> lhs,
+    const _STD basic_string<_CharTy, _Traits, _Alloc>& rhs) {
+    _STD basic_string<_CharTy, _Traits, _Alloc> r{
+        _STD allocator_traits<_Alloc>::select_on_container_copy_construction(rhs.get_allocator())};
+    r.reserve(lhs.size() + rhs.size());
+    r.append(lhs);
+    r.append(rhs);
+
+    return r;
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    _STD basic_string<_CharTy, _Traits, _Alloc>&& lhs, _STD basic_string<_CharTy, _Traits, _Alloc>&& rhs) {
+    lhs.append(rhs);
+
+    return _STD move(lhs);
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    _STD basic_string<_CharTy, _Traits, _Alloc>&& lhs, const _STD basic_string<_CharTy, _Traits, _Alloc>& rhs) {
+    lhs.append(rhs);
+
+    return _STD move(lhs);
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    _STD basic_string<_CharTy, _Traits, _Alloc>&& lhs, const _CharTy* rhs) {
+    lhs.append(rhs);
+
+    return _STD move(lhs);
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    _STD basic_string<_CharTy, _Traits, _Alloc>&& lhs, const _CharTy rhs) {
+    lhs.push_back(rhs);
+
+    return _STD move(lhs);
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    _STD basic_string<_CharTy, _Traits, _Alloc>&& lhs,
+    _STD type_identity_t<_STD basic_string_view<_CharTy, _Traits>> rhs) {
+    lhs.append(rhs);
+
+    return _STD move(lhs);
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    const _STD basic_string<_CharTy, _Traits, _Alloc>& lhs, _STD basic_string<_CharTy, _Traits, _Alloc>&& rhs) {
+    rhs.insert(_STD size_t(0), lhs);
+
+    return _STD move(rhs);
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    const _CharTy* lhs, _STD basic_string<_CharTy, _Traits, _Alloc>&& rhs) {
+    rhs.insert(_STD size_t(0), lhs);
+    return std::move(rhs);
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    const _CharTy lhs, _STD basic_string<_CharTy, _Traits, _Alloc>&& rhs) {
+    rhs.insert(rhs.begin(), lhs);
+    return std::move(rhs);
+}
+
+template <class _CharTy, class _Traits, class _Alloc>
+inline constexpr _STD basic_string<_CharTy, _Traits, _Alloc> operator+(
+    _STD type_identity_t<_STD basic_string_view<_CharTy, _Traits>> lhs,
+    _STD basic_string<_CharTy, _Traits, _Alloc>&& rhs) {
+    rhs.insert(_STD size_t(0), lhs);
+
+    return _STD move(rhs);
+}
+
+template <class _CharTy, class _Traits, class _Alloc, class _Uy = _CharTy>
+inline constexpr typename basic_string<_CharTy, _Traits, _Alloc>::size_type erase(
+    basic_string<_CharTy, _Traits, _Alloc>& c, const _Uy& value) {
+    auto const r = c.end() - _STD remove(c.begin(), c.end(), value);
+    c.resize(c.size() - r);
+
+    return r;
+}
+
+template <class _CharTy, class _Traits, class _Alloc, class _Pred>
+inline constexpr typename basic_string<_CharTy, _Traits, _Alloc>::size_type erase_if(
+    basic_string<_CharTy, _Traits, _Alloc>& c, _Pred pred) {
+    auto const r = c.end() - _STD remove_if(c.begin(), c.end(), pred);
+    c.resize(c.size() - r);
+
+    return r;
+}
+
+using string    = _STD basic_string<char>;
+using wstring   = _STD basic_string<wchar_t>;
+using u8string  = _STD basic_string<char8_t>;
+using u16string = _STD basic_string<char16_t>;
+using u32string = _STD basic_string<char32_t>;
+
+#if defined(_DEBUG)
+static_assert(_STD contiguous_iterator<string::iterator>);
+#endif
+
+namespace pmr {
+    template <class _CharTy, class _Traits = _STD char_traits<_CharTy>>
+    using basic_string = basic_string<_CharTy, _Traits, _STD pmr::polymorphic_allocator<_CharTy>>;
+
+    using string    = basic_string<char>;
+    using wstring   = basic_string<wchar_t>;
+    using u8string  = basic_string<char8_t>;
+    using u16string = basic_string<char16_t>;
+    using u32string = basic_string<char32_t>;
+} // namespace pmr
+_STD_END
+
+_STD_BEGIN
+
+template <class _Elem, class _Alloc>
+struct hash<basic_string<_Elem, char_traits<_Elem>, _Alloc>>
+    : _Conditionally_enabled_hash<basic_string<_Elem, char_traits<_Elem>, _Alloc>, _Is_EcharT<_Elem>> {
+    _NODISCARD static size_t _Do_hash(const basic_string<_Elem, char_traits<_Elem>, _Alloc>& _Keyval) noexcept {
+        return _Hash_array_representation(_Keyval.c_str(), _Keyval.size());
+    }
+};
+
+_EXPORT_STD template <class _Elem, class _Traits, class _Alloc>
+basic_istream<_Elem, _Traits>& operator>>(
+    basic_istream<_Elem, _Traits>& _Istr, basic_string<_Elem, _Traits, _Alloc>& _Str) {
+    using _Myis   = basic_istream<_Elem, _Traits>;
+    using _Ctype  = typename _Myis::_Ctype;
+    using _Mystr  = basic_string<_Elem, _Traits, _Alloc>;
+    using _Mysizt = typename _Mystr::size_type;
+
+    typename _Myis::iostate _State = _Myis::goodbit;
+    bool _Changed                  = false;
+    const typename _Myis::sentry _Ok(_Istr);
+
+    if (_Ok) { // state okay, extract characters
+        const _Ctype& _Ctype_fac = _STD use_facet<_Ctype>(_Istr.getloc());
+        _Str.erase();
+
+        _TRY_IO_BEGIN
+        _Mysizt _Size;
+        if (0 < _Istr.width() && static_cast<_Mysizt>(_Istr.width()) < _Str.max_size()) {
+            _Size = static_cast<_Mysizt>(_Istr.width());
+        } else {
+            _Size = _Str.max_size();
+        }
+
+        typename _Traits::int_type _Meta = _Istr.rdbuf()->sgetc();
+
+        for (; 0 < _Size; --_Size, _Meta = _Istr.rdbuf()->snextc()) {
+            if (_Traits::eq_int_type(_Traits::eof(), _Meta)) { // end of file, quit
+                _State |= _Myis::eofbit;
+                break;
+            } else if (_Ctype_fac.is(_Ctype::space, _Traits::to_char_type(_Meta))) {
+                break; // whitespace, quit
+            } else { // add character to string
+                _Str.push_back(_Traits::to_char_type(_Meta));
+                _Changed = true;
+            }
+        }
+        _CATCH_IO_(_Myis, _Istr)
+    }
+
+    _Istr.width(0);
+    if (!_Changed) {
+        _State |= _Myis::failbit;
+    }
+
+    _Istr.setstate(_State);
+    return _Istr;
+}
+
+_EXPORT_STD template <class _Elem, class _Traits, class _Alloc>
+basic_ostream<_Elem, _Traits>& operator<<(
+    basic_ostream<_Elem, _Traits>& _Ostr, const basic_string<_Elem, _Traits, _Alloc>& _Str) {
+    return _Insert_string(_Ostr, _Str.data(), _Str.size());
+}
+
+inline namespace literals {
+    inline namespace string_literals {
+        _EXPORT_STD _NODISCARD _CONSTEXPR20 string operator""s(const char* _Str, size_t _Len) {
+            return string{_Str, _Len};
+        }
+
+        _EXPORT_STD _NODISCARD _CONSTEXPR20 wstring operator""s(const wchar_t* _Str, size_t _Len) {
+            return wstring{_Str, _Len};
+        }
+
+#ifdef __cpp_char8_t
+        _EXPORT_STD _NODISCARD _CONSTEXPR20 basic_string<char8_t> operator""s(const char8_t* _Str, size_t _Len) {
+            return basic_string<char8_t>{_Str, _Len};
+        }
+#endif // defined(__cpp_char8_t)
+
+        _EXPORT_STD _NODISCARD _CONSTEXPR20 u16string operator""s(const char16_t* _Str, size_t _Len) {
+            return u16string{_Str, _Len};
+        }
+
+        _EXPORT_STD _NODISCARD _CONSTEXPR20 u32string operator""s(const char32_t* _Str, size_t _Len) {
+            return u32string{_Str, _Len};
+        }
+    } // namespace string_literals
+} // namespace literals
+
+_STD_END
+
+
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(pop)
+#elif defined(__clang__)
+#pragma clang diagnostic pop
+#else
+#pragma GCC diagnostic pop
+#endif
+
+#pragma pop_macro("new")
+
+#endif // _STL_COMPILER_PREPROCESSOR
+#endif // _XSTRING_

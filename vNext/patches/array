@@ -1,0 +1,7 @@
+private:
+    class alignas(_Ty) _Empty {};
+    using _Adjust1 = conditional_t<is_const_v<_Ty>, const _Empty, _Empty>;
+    using _Adjust2 = conditional_t<is_volatile_v<_Ty>, volatile _Adjust1, _Adjust1>;
+
+public:
+    _Adjust2 _Placeholder;

@@ -1,0 +1,3 @@
+        _NODISCARD friend bool operator==(const path& _Left, const string_type& _Right) noexcept {
+            return _Left._Text == _Right;
+        }
