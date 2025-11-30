@@ -9,7 +9,7 @@ class TextFile {
     TextFile([string]$filePath) {
         $this.FilePath = $filePath
         if (Test-Path $this.FilePath) {
-            $this.Lines = Get-Content -Path $this.FilePath -Encoding "UTF-8"
+            $this.Lines = Get-Content -Path $this.FilePath -Encoding UTF-8
         }
         else {
             throw "File '$filePath' not found"
@@ -25,7 +25,7 @@ class TextFile {
     }
 
     [void] Save() {
-        $this.Lines | Out-File -FilePath $this.FilePath -Encoding "UTF-8"
+        $this.Lines | Out-File -FilePath $this.FilePath -Encoding UTF-8
     }
 
     [int] Find([string]$pattern) {
@@ -52,7 +52,6 @@ class TextFile {
         $lenA = $this.Lines.Length
         $lenB = $patternLines.Length
 
-        # 如果B为空或A比B短，抛出异常
         if ($lenB -eq 0) {
             throw "Pattern lines cannot be empty"
         }
@@ -76,7 +75,6 @@ class TextFile {
             }
         }
 
-        # 检查匹配结果数量
         if ($result.Count -eq 0) {
             throw "Multi-line pattern not found in file"
         }
@@ -84,7 +82,6 @@ class TextFile {
             throw "Found multi match results: $($result -join ', ')"
         }
 
-        # 返回唯一的匹配位置
         return $result[0]
     }
 
@@ -173,8 +170,10 @@ class TextFile {
     }
 }
 
-$backupPath = Join-Path $repoPath "vNext\backup"
-$patchesPath = Join-Path $repoPath "vNext\patches"
+$vNextPath = $PSScriptRoot
+
+$backupPath = Join-Path $vNextPath "backup"
+$patchesPath = Join-Path $vNextPath "patches"
 
 if (Test-Path $backupPath) {
     throw "Backup path '$backupPath' is exist"
@@ -186,9 +185,10 @@ New-Item -Path $backupPath -ItemType Directory > $null
     $stlCMakeLists = [TextFile]::new((Join-Path $repoPath 'stl\CMakeLists.txt'))
     $stlCMakeLists.Backup((Join-Path $backupPath 'stl\CMakeLists.txt'))
     $line = $stlCMakeLists.Find('set_target_properties(libcpmt${FLAVOR_SUFFIX} PROPERTIES STATIC_LIBRARY_OPTIONS "${VCLIBS_EXPLICIT_MACHINE}")')
-    $content = '    add_custom_command(TARGET libcpmt${FLAVOR_SUFFIX} POST_BUILD COMMAND powershell ${CMAKE_SOURCE_DIR}/vNext/FixSpecialMath.ps1 "$<TARGET_FILE:libcpmt${FLAVOR_SUFFIX}>" VERBATIM)'
+    $content = '    add_custom_command(TARGET libcpmt${FLAVOR_SUFFIX} POST_BUILD COMMAND powershell ${CMAKE_SOURCE_DIR}/FixSpecialMath.ps1 "$<TARGET_FILE:libcpmt${FLAVOR_SUFFIX}>" VERBATIM)'
     $stlCMakeLists.Insert($line + 1, $content)
     $stlCMakeLists.Save()
+    Copy-Item (Join-Path $patchesPath 'FixSpecialMath.ps1') (Join-Path $repoPath 'FixSpecialmath.ps1')
 }
 
 & {
@@ -250,12 +250,8 @@ New-Item -Path $backupPath -ItemType Directory > $null
 
         $content = Get-Content -Path $file.FullName -Encoding UTF8
 
-        $filteredContent = @()
-        foreach ($line in $content) {
-            if ($line.Contains($std14) -or $line.Contains($std17)) {
-                continue
-            }
-            $filteredContent = $filteredContent + @($line)
+        $filteredContent = $content | Where-Object {
+            !($_.Contains($std14) -or $_.Contains($std17))
         }
 
         if ($filteredContent.Count -eq $content.Count) {
@@ -279,13 +275,6 @@ New-Item -Path $backupPath -ItemType Directory > $null
     $expectedPatch = [TextFile]::new((Join-Path $patchesPath 'expected_results.txt'))
     $expected.AppendRange($expectedPatch.GetLines())
     $expected.Save()
-}
-
-& {
-    $gitignore = [TextFile]::new((Join-Path $repoPath '.gitignore'))
-    $gitignore.Backup((Join-Path $repoPath 'vNext\backup\.gitignore'))
-    $gitignore.Append('vNext/backup')
-    $gitignore.Save()
 }
 
 & {
