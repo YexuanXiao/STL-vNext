@@ -40,7 +40,6 @@ function Exact-Update-Repack {
     $libDirectory = Split-Path $LibPath -Parent
     $filename = Split-Path -Path $LibPath -Leaf
     $tempDir = Join-Path $libDirectory ($filename + "_temp")
-    Write-Host $tempDir
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
     & llvm-ar x $LibPath --output $tempDir
     $specialMathLib = Join-Path $tempDir "special_math.cpp.obj"
