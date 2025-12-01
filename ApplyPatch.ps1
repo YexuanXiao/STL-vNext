@@ -198,7 +198,7 @@ New-Item -Path $backupPath -ItemType Directory > $null
 & {
     $array = [TextFile]::new((Join-Path $repoPath 'stl\inc\array'))
     $array.Backup((Join-Path $backupPath 'stl\inc\array'))
-    $arrayPatch = [TextFile]::new((Join-Path $patchesPath 'array'))
+    $arrayPatch = [TextFile]::new((Join-Path $patchesPath 'inc\array'))
     $pattern = @(
         'conditional_t<disjunction_v<is_default_constructible<_Ty>, _Is_implicitly_default_constructible<_Ty>>, _Ty,',
         '_Empty_array_element>',
@@ -212,7 +212,7 @@ New-Item -Path $backupPath -ItemType Directory > $null
 
 & {
     Copy-Item -Path (Join-Path $repoPath 'stl\inc\deque') -Destination (Join-Path $backupPath 'stl\inc\deque')
-    Copy-Item -Path (Join-Path $patchesPath 'deque') -Destination (Join-Path $repoPath 'stl\inc\deque') -Force
+    Copy-Item -Path (Join-Path $patchesPath 'inc\deque') -Destination (Join-Path $repoPath 'stl\inc\deque') -Force
 }
 
 <#
@@ -221,7 +221,7 @@ New-Item -Path $backupPath -ItemType Directory > $null
 
 & {
     Copy-Item -Path (Join-Path $repoPath 'stl\inc\xstring') -Destination (Join-Path $backupPath 'stl\inc\xstring')
-    Copy-Item -Path (Join-Path $patchesPath 'xstring') -Destination (Join-Path $repoPath 'stl\inc\xstring') -Force
+    Copy-Item -Path (Join-Path $patchesPath 'inc\xstring') -Destination (Join-Path $repoPath 'stl\inc\xstring') -Force
 }
 
 & {
@@ -235,8 +235,8 @@ New-Item -Path $backupPath -ItemType Directory > $null
 & {
     $fs = [TextFile]::new((Join-Path $repoPath 'stl\inc\filesystem'))
     $fs.Backup((Join-Path $backupPath 'stl\inc\filesystem'))
-    $fsPatch1 = [TextFile]::new((Join-Path $patchesPath 'filesystem1'))
-    $fsPatch2 = [TextFile]::new((Join-Path $patchesPath 'filesystem2'))
+    $fsPatch1 = [TextFile]::new((Join-Path $patchesPath 'inc\filesystem1'))
+    $fsPatch2 = [TextFile]::new((Join-Path $patchesPath 'inc\filesystem2'))
     $pattern = @(
         '#if _HAS_CXX20',
         '_NODISCARD friend strong_ordering operator<=>(const path& _Left, const path& _Right) noexcept {',
