@@ -1,4 +1,3 @@
-
 (async function() {
     const response = await fetch("https://eel.is/c++draft/libraryindex");
     const htmlText = await response.text();
