@@ -61,9 +61,13 @@ See [HowToUse.md](https://github.com/YexuanXiao/STL-vNext/blob/main/HowToUse.md)
 
 This project welcomes contributions from anyone and is licensed under the **Apache-2.0 WITH LLVM-exception** license, the same as Microsoft STL.
 
-Before contributing, you should have a solid understanding of the C++ standard (for example, by reading [the C++ standard draft](https://eel.is/c++draft) or [C++ Reference](https://en.cppreference.com/)), and cite relevant sections when necessary.
+Before contributing, you should have a solid understanding of the C++ standard (for example, by reading [the C++ Standard Draft](https://eel.is/c++draft) or [C++ Reference](https://en.cppreference.com/)), and cite relevant sections when necessary.
 
 The build and testing process for this project is identical to Microsoft STL. Before submitting a Pull Request, ensure all tests pass against the Microsoft STL test suite.
+
+All patches need to be applied to the STL by executing `ApplyPatch.ps1`, and they must be properly backed up as well as reverted via `RevertPatch.ps1`.
+
+`getIdentifiers.js` is used to download all identifiers used by the standard library. Open https://eel.is/c++draft, paste content of `getIdentifiers.js` into the debug console and execute to obtain `identifiers.txt`. `uglify.py` is used to uglify the source code, see its output for usage instructions.
 
 ## Release rule
 
