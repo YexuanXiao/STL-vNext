@@ -1,0 +1,5 @@
+#pragma pop_macro("msvc")
+#pragma pop_macro("new")
+
+#endif // _STL_COMPILER_PREPROCESSOR
+#endif // _DEQUE_

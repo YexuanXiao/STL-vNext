@@ -2,6 +2,13 @@ param(
     [string]$repoPath = "..\"
 )
 
+$enable_array = $true
+<#
+$enable_string = $false
+#>
+$enable_deque = $true
+$enable_math = $true
+
 class TextFile {
     [string[]]$Lines
     [string]$FilePath
@@ -183,21 +190,23 @@ New-Item -Path $backupPath -ItemType Directory > $null
 
 # Boost.Math
 
-& {
-    $stlCMakeLists = [TextFile]::new((Join-Path $repoPath 'stl\CMakeLists.txt'))
-    $stlCMakeLists.Backup((Join-Path $backupPath 'stl\CMakeLists.txt'))
+if ($enable_math) {
+    $base = 'stl\CMakeLists.txt'
+    $stlCMakeLists = [TextFile]::new((Join-Path $repoPath $base))
+    $stlCMakeLists.Backup((Join-Path $backupPath $base))
     $line = $stlCMakeLists.Find('set_target_properties(libcpmt${FLAVOR_SUFFIX} PROPERTIES STATIC_LIBRARY_OPTIONS "${VCLIBS_EXPLICIT_MACHINE}")')
     $content = '    add_custom_command(TARGET libcpmt${FLAVOR_SUFFIX} POST_BUILD COMMAND powershell ${CMAKE_SOURCE_DIR}/FixSpecialMath.ps1 "$<TARGET_FILE:libcpmt${FLAVOR_SUFFIX}>" VERBATIM)'
     $stlCMakeLists.Insert($line + 1, $content)
     $stlCMakeLists.Save()
-    Copy-Item (Join-Path $patchesPath 'FixSpecialMath.ps1') (Join-Path $repoPath 'FixSpecialmath.ps1')
+    Copy-Item (Join-Path $patchesPath 'FixSpecialMath.ps1') (Join-Path $repoPath 'FixSpecialMath.ps1')
 }
 
 # array
 
-& {
-    $array = [TextFile]::new((Join-Path $repoPath 'stl\inc\array'))
-    $array.Backup((Join-Path $backupPath 'stl\inc\array'))
+if ($enable_array) {
+    $base = 'stl\inc\array'
+    $array = [TextFile]::new((Join-Path $repoPath $base))
+    $array.Backup((Join-Path $backupPath $base))
     $arrayPatch = [TextFile]::new((Join-Path $patchesPath 'inc\array'))
     $pattern = @(
         'conditional_t<disjunction_v<is_default_constructible<_Ty>, _Is_implicitly_default_constructible<_Ty>>, _Ty,',
@@ -206,25 +215,171 @@ New-Item -Path $backupPath -ItemType Directory > $null
     $idx = $array.FindMultiLine($pattern)
     $array.ReplaceRange($idx, $idx + $pattern.Count, $arrayPatch.GetLines())
     $array.Save()
+
+    Copy-Item (Join-Path $patchesPath 'GH_005583_array_T_0') (Join-Path $repoPath 'tests\std\tests\') -Force -Recurse
+}
+
+if ($enable_array) {
+    $base = 'tests\std\tests\Dev11_1074023_constexpr\test.cpp'
+    $test = [TextFile]::new((Join-Path $repoPath $base))
+    $test.Backup((Join-Path $backupPath $base))
+    $test.Insert($test.Find('constexpr array<int, 0> empty_array;'), "#pragma warning( push )`n#pragma warning( disable : 4268 )")
+    $test.Insert($test.Find('constexpr array<int, 0> empty_array;') + 1, '#pragma warning( pop )')
+    $test.Save()
+}
+
+if ($enable_array) {
+    $base = 'tests\std\tests\P2321R2_views_adjacent\test.cpp'
+    $test = [TextFile]::new((Join-Path $repoPath $base))
+    $test.Backup((Join-Path $backupPath $base))
+    $test.Insert($test.Find('constexpr array<repeated_tuple<int, 7>, 0> adjacent7_result;'), "#pragma warning( push )`n#pragma warning( disable : 4268 )")
+    $test.Insert($test.Find('constexpr array<repeated_tuple<int, 7>, 0> adjacent7_result;') + 1, '#pragma warning( pop )')
+    $test.Save()
+}
+
+# disable by BUG 1
+if ($enable_array -and $false) {
+    $base = 'tests\libcxx\expected_results.txt'
+    $expectedRes = [TextFile]::new((Join-Path $repoPath $base))
+    $expectedRes.Backup((Join-Path $backupPath $base))
+    $expectedRes.Remove($exPectedRes.Find('std/containers/sequences/array/array.cons/implicit_copy.pass.cpp FAIL'))
+    $expectedRes.Insert($exPectedRes.Find('# Bogus test believes that copyability of array<T, 0> must be the same as array<T, 1>'), '# Fixed by YexuanXiao/STL-vNext')
+    $expectedRes.Save()
 }
 
 # deque
 
-& {
+if ($enable_deque) {
     Copy-Item -Path (Join-Path $repoPath 'stl\inc\deque') -Destination (Join-Path $backupPath 'stl\inc\deque')
     Copy-Item -Path (Join-Path $patchesPath 'inc\deque') -Destination (Join-Path $repoPath 'stl\inc\deque') -Force
+    Copy-Item (Join-Path $patchesPath 'GH_001036_vector_deque_move_only') (Join-Path $repoPath 'tests\std\tests\') -Force -Recurse
+    Copy-Item (Join-Path $patchesPath 'LLVM_062056_deque_exception_safety') (Join-Path $repoPath 'tests\std\tests\') -Force -Recurse
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\tests\GH_003570_allocate_at_least\test.cpp'
+    $atLeast = [TextFile]::new((Join-Path $repoPath $base))
+    $atLeast.Backup((Join-Path $backupPath $base))
+    $atLeast.Remove($atLeast.Find('    test_deque();'))
+    $atLeast.Save()
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\tests\GH_005315_destructor_tombstones\test.cpp'
+    $asanDestructor = [TextFile]::new((Join-Path $repoPath $base))
+    $asanDestructor.Backup((Join-Path $backupPath $base))
+    $asanDestructor.Remove($asanDestructor.Find('        test_deque,'))
+    $asanDestructor.Save()
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\tests\Dev10_500860_overloaded_address_of\test.cpp'
+    $overAddrOf = [TextFile]::new((Join-Path $repoPath $base))
+    $overAddrOf.Backup((Join-Path $backupPath $base))
+    $overAddrOf.Replace($overAddrOf.Find('template class std::_Deque_iterator<_Deque_val<_Deque_simple_types<Evil>>>;'), 'template class std::__deque_detail::__deque_iterator<__deque_detail::__add_adl_firewall_t<Evil>, __deque_detail::__add_adl_firewall_t<Evil*>, std::ptrdiff_t>;')
+    $overAddrOf.Replace($overAddrOf.Find('template class std::_Deque_const_iterator<_Deque_val<_Deque_simple_types<Evil>>>;'), 'template class std::__deque_detail::__deque_iterator<__deque_detail::__add_adl_firewall_t<const Evil>, __deque_detail::__add_adl_firewall_t<Evil*>, std::ptrdiff_t>;')
+    $overAddrOf.Remove($overAddrOf.Find('template class std::_Deque_unchecked_iterator<_Deque_val<_Deque_simple_types<Evil>>>;'))
+    $overAddrOf.Remove($overAddrOf.Find('template class std::_Deque_unchecked_const_iterator<_Deque_val<_Deque_simple_types<Evil>>>;'))
+    $overAddrOf.Save()
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\tests\GH_005090_stl_hardening\test.cpp'
+    $harden = [TextFile]::new((Join-Path $repoPath $base))
+    $harden.Backup((Join-Path $backupPath $base))
+    $harden.Remove($harden.Find('        test_deque_subscript,'))
+    $harden.Remove($harden.Find('        test_deque_subscript_const,'))
+    $harden.Remove($harden.Find('        test_deque_front,'))
+    $harden.Remove($harden.Find('        test_deque_front_const,'))
+    $harden.Remove($harden.Find('        test_deque_back,'))
+    $harden.Remove($harden.Find('        test_deque_back_const,'))
+    $harden.Remove($harden.Find('        test_deque_pop_front,'))
+    $harden.Remove($harden.Find('        test_deque_pop_back,'))
+    $harden.Save()
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\tests\VSO_0102478_moving_allocators\test.cpp'
+    $debug_begin = [TextFile]::new((Join-Path $repoPath $base))
+    $debug_begin.Backup((Join-Path $backupPath $base))
+    $debug_begin.Remove($debug_begin.Find('container_test<deque>();'))
+    $debug_begin.Save()
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\tests\VSO_0429900_fast_debug_range_based_for\test.cpp'
+    $debug_begin = [TextFile]::new((Join-Path $repoPath $base))
+    $debug_begin.Backup((Join-Path $backupPath $base))
+    $debug_begin.Remove($debug_begin.Find('test_case_sequence_container<deque>();'))
+    $debug_begin.Save()
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\tests\GH_002992_unwrappable_iter_sent_pairs\test.compile.pass.cpp'
+    $unwrap_iter = [TextFile]::new((Join-Path $repoPath $base))
+    $unwrap_iter.Backup((Join-Path $backupPath $base))
+    $unwrap_iter.Remove($unwrap_iter.Find('test_classic_range<deque<int>>();'))
+    $unwrap_iter.Save()
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\tests\VSO_0830211_container_debugging_range_checks\test.cpp'
+    $debug_range = [TextFile]::new((Join-Path $repoPath $base))
+    $debug_range.Backup((Join-Path $backupPath $base))
+    $debug_range.Remove($debug_range.Find('TestCases<DequeTestCaseTraits>::negative_cases();'))
+    $debug_range.Remove($debug_range.Find('TestCases<ConstDequeTestCaseTraits>::negative_cases();'))
+    $debug_range.Remove($debug_range.Find('TestCases<DequeTestCaseTraits>::add_cases(exec);'))
+    $debug_range.Remove($debug_range.Find('TestCases<ConstDequeTestCaseTraits>::add_cases(exec);'))
+    $debug_range.Save()
+}
+
+if ($enable_deque -or $enable_array) {
+    $base = 'tests\std\test.lst'
+    $testLst = [TextFile]::new((Join-Path $repoPath $base))
+    $testLst.Backup((Join-Path $backupPath $base))
+    if ($enable_deque) {
+        $testLst.Insert($testLst.Find('tests\GH_001017_discrete_distribution_out_of_range') + 1, 'tests\GH_001036_vector_deque_move_only')
+        $testLst.Insert($testLst.Find('tests\LWG2381_num_get_floating_point'), 'tests\LLVM_062056_deque_exception_safety')
+    }
+    if ($enable_array) {
+        $testLst.Insert($testLst.Find('tests\GH_005553_regex_character_translation') + 1, 'tests\GH_005583_array_T_0')
+    }
+    $testLst.Save()
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\expected_results.txt'
+    $stdE = [TextFile]::new((Join-Path $repoPath $base))
+    $stdE.Backup((Join-Path $backupPath $base))
+    $stdE.Append('tests/Dev10_709168_marking_iterators_as_checked SKIPPED')
+    $stdE.Append('GH_002992_unwrappable_iter_sent_pairs SKIPPED')
+    $stdE.Save()
+}
+
+if ($enable_deque) {
+    $base = 'tests\std\include\input_iterator.hpp'
+    $iit = [TextFile]::new((Join-Path $repoPath $base))
+    $iit.Backup((Join-Path $backupPath $base))
+
+    $content = Get-Content -Path $iit.FilePath -Raw -Encoding utf8NoBOM
+
+    if (($newText = $content -replace 'void operator\+\+\(int\) = delete; // avoid postincrement', 'void operator++(int) { std::abort(); } // avoid postincrement') -eq $content) {
+        throw 'Pattern not found in file'
+    } else {
+        $newText | Out-File -FilePath $iit.FilePath -Encoding utf8NoBOM
+    }
 }
 
 <#
 
 #string
 
-& {
+if ($enable_string) {
     Copy-Item -Path (Join-Path $repoPath 'stl\inc\xstring') -Destination (Join-Path $backupPath 'stl\inc\xstring')
     Copy-Item -Path (Join-Path $patchesPath 'inc\xstring') -Destination (Join-Path $repoPath 'stl\inc\xstring') -Force
 }
 
-& {
+if ($enable_string) {
     $expected = [TextFile]::new((Join-Path $repoPath 'tests\libcxx\expected_results.txt'))
     $expected.Backup((Join-Path $backupPath 'tests\libcxx\expected_results.txt'))
     $expectedPatch = [TextFile]::new((Join-Path $patchesPath 'expected_results.txt'))
@@ -232,7 +387,7 @@ New-Item -Path $backupPath -ItemType Directory > $null
     $expected.Save()
 }
 
-& {
+if ($enable_string) {
     $fs = [TextFile]::new((Join-Path $repoPath 'stl\inc\filesystem'))
     $fs.Backup((Join-Path $backupPath 'stl\inc\filesystem'))
     $fsPatch1 = [TextFile]::new((Join-Path $patchesPath 'inc\filesystem1'))
@@ -249,11 +404,12 @@ New-Item -Path $backupPath -ItemType Directory > $null
 
 #>
 
-# tests
+# disable tests for C++14 and C++17
 
 & {
-    $sourceFolder = Join-Path $repoPath 'tests\std\tests'
-    $backupFolder = Join-Path $backupPath 'tests\std\tests'
+    $base = 'tests'
+    $sourceFolder = Join-Path $repoPath $base
+    $backupFolder = Join-Path $backupPath $base
     $std14 = 'c++14'
     $std17 = 'c++17'
 
@@ -261,7 +417,7 @@ New-Item -Path $backupPath -ItemType Directory > $null
         New-Item -Path $backupFolder -ItemType Directory -Force > $null
     }
 
-    $lstFiles = Get-ChildItem -Path $sourceFolder -Filter "*.lst" -File
+    $lstFiles = Get-ChildItem -Path $sourceFolder -Filter "*.lst" -File -Recurse
 
     if ($lstFiles.Count -eq 0) {
         throw "Error path: '$sourceFolder'"
@@ -283,21 +439,4 @@ New-Item -Path $backupPath -ItemType Directory > $null
         Copy-Item -Path $file.FullName -Destination $backupPath
         $filteredContent | Out-File -FilePath $file.FullName -Encoding UTF8
     }
-}
-
-# deque array tests
-
-& {
-    Copy-Item (Join-Path $patchesPath 'GH_001036_vector_deque_move_only') (Join-Path $repoPath 'tests\std\tests\GH_001036_vector_deque_move_only') -Force -Recurse
-    Copy-Item (Join-Path $patchesPath 'GH_005583_array_T_0') (Join-Path $repoPath 'tests\std\tests\GH_005583_array_T_0') -Force -Recurse
-    Copy-Item (Join-Path $patchesPath 'LLVM_062056_deque_exception_safety') (Join-Path $repoPath 'tests\std\tests\LLVM_062056_deque_exception_safety') -Force -Recurse
-}
-
-& {
-    $testLst = [TextFile]::new((Join-Path $repoPath 'tests\std\test.lst'))
-    $testLst.Backup((Join-Path $backupPath 'tests\std\test.lst'))
-    $testLst.Insert($testLst.Find('tests\GH_001017_discrete_distribution_out_of_range') + 1, 'tests\GH_001036_vector_deque_move_only')
-    $testLst.Insert($testLst.Find('tests\LWG2381_num_get_floating_point'), 'tests\LLVM_062056_deque_exception_safety')
-    $testLst.Insert($testLst.Find('tests\GH_005553_regex_character_translation') + 1, 'tests\GH_005583_array_T_0')
-    $testLst.Save()
 }

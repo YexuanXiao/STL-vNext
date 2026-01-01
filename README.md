@@ -21,7 +21,7 @@ For more information, see [#3](https://github.com/YexuanXiao/STL-vNext/issues/3)
 
 - **C++20 or later** is required for avoid the need for `enable_if` and `void_t` idioms.
 
-## ABI Stability
+## ABI stability
 
 This project is **always ABI-unstable**.
 
@@ -47,6 +47,10 @@ The following is a list of problems that this project will fix:
 - ❎ [`<chrono>`: Major performance issues when using zoned_time or time_zone](https://github.com/microsoft/STL/issues/2842)
 
 Other bugs may also be considered for fixes if justified, though the listed bugs remain the top priority.
+
+## How to use
+
+See [HowToUse.md](https://github.com/YexuanXiao/STL-vNext/blob/main/HowToUse.md).
 
 ## Relationship with Microsoft STL
 

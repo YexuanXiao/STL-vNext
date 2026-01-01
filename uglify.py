@@ -58,11 +58,16 @@ if __name__ == '__main__':
         else:
             usage()
 
-    with open(input_file, 'r') as f:
+    with open(input_file, 'r', encoding='ascii', errors='ignore') as f:
         content = f.read()
 
     #步骤0: 处理警告
     content = content.replace('#pragma clang diagnostic push', '#pragma clang diagnostic push\n#pragma clang diagnostic ignored "-Wuser-defined-literals"')
+
+    # 步骤0.5：EDG BUG的workaround
+    content = content.replace('defined(__cpp_auto_cast)', '(0)')
+    # 步骤0.6 禁用repeat_view
+    content = content.replace('defined(__cpp_lib_ranges_repeat)', '(0)')
 
     #步骤1: 处理out_of_range和length_error
     content = content.replace('throw ::std::out_of_range', '_Xout_of_range')

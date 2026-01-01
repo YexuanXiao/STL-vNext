@@ -1,7 +1,18 @@
+// TRANSITION1: https://developercommunity.visualstudio.com/t/10947209
+// TRANSITION2: https://developercommunity.visualstudio.com/t/11016074
+// The modification has been manually verified as correct and compliant with standards and STL, but it cannot pass the test due to MSVC BUG 2
 private:
-    class alignas(_Ty) _Empty {};
+    class _Empty {};
+#if 0 // BUG 1
     using _Adjust1 = conditional_t<is_const_v<_Ty>, const _Empty, _Empty>;
     using _Adjust2 = conditional_t<is_volatile_v<_Ty>, volatile _Adjust1, _Adjust1>;
+#else
+    using _Adjust2 = conditional_t<is_volatile_v<_Ty>, volatile _Empty, _Empty>;
+#endif
 
 public:
+#if 0 // BUG 2
+    alignas(_Ty) _Adjust2 _Placeholder;
+#else
     _Adjust2 _Placeholder;
+#endif
