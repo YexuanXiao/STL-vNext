@@ -250,6 +250,7 @@ if ($enable_array -and $false) {
 # deque
 
 if ($enable_deque) {
+    .\MakeDeque.ps1
     Copy-Item -Path (Join-Path $repoPath 'stl\inc\deque') -Destination (Join-Path $backupPath 'stl\inc\deque')
     Copy-Item -Path (Join-Path $patchesPath 'inc\deque') -Destination (Join-Path $repoPath 'stl\inc\deque') -Force
     Copy-Item (Join-Path $patchesPath 'GH_001036_vector_deque_move_only') (Join-Path $repoPath 'tests\std\tests\') -Force -Recurse
